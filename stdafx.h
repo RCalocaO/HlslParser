@@ -13,3 +13,10 @@
 
 
 // TODO: reference additional headers your program requires here
+#include <vector>
+#include <string>
+#include <list>
+#include <map>
+#include <stack>
+#include <stdio.h>
+#include <assert.h>
