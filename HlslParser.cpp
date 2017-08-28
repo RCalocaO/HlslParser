@@ -5,7 +5,7 @@
 
 std::string Filename = ".\\tests\\expr.hlsl";
 
-std::string Load(const char* Filename)
+static std::string Load(const char* Filename)
 {
 	std::vector<char> Data;
 	FILE* File;
@@ -112,17 +112,26 @@ struct FLexer
 	}
 };
 
-int main()
+static void Parse(const std::string& Data)
 {
-	std::string Data = Load(Filename.c_str());
-
 	FLexer Lexer(Data);
 	std::vector<FToken> Tokens;
 	while (Lexer.HasMoreTokens())
 	{
 		FToken Token = Lexer.NextToken();
+		if (Token.TokenType == EToken::Error)
+		{
+			break;
+		}
 		Tokens.push_back(Token);
 	}
+}
+
+int main()
+{
+	std::string Data = Load(Filename.c_str());
+
+	Parse(Data);
 
 	return 0;
 }
