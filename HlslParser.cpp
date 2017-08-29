@@ -147,18 +147,178 @@ struct FLexer
 	}
 };
 
-static void Parse(const std::string& Data)
+struct FTokenizer
+{
+	std::vector<FToken> Tokens;
+	FTokenizer(const std::vector<FToken>& InTokens)
+		: Tokens(InTokens)
+	{
+	}
+
+	uint32_t Current = 0;
+
+	bool HasMoreTokens() const
+	{
+		return Current < Tokens.size();
+	}
+
+	void Advance()
+	{
+		if (HasMoreTokens())
+		{
+			++Current;
+		}
+	}
+
+	bool Match(EToken Token)
+	{
+		if (HasMoreTokens())
+		{
+			if (Tokens[Current].TokenType == Token)
+			{
+				++Current;
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	EToken PeekToken() const
+	{
+		if (HasMoreTokens())
+		{
+			return Tokens[Current].TokenType;
+		}
+
+		return EToken::Error;
+	}
+};
+
+
+struct FParseRules
+{
+//	std::map<std::vector<EToken>, std::function<bool(FParseRules&, FTokenizer& Tokenizer)>> Rules;
+	FTokenizer& Tokenizer;
+	FParseRules(FTokenizer& InTokenizer)
+		: Tokenizer(InTokenizer)
+	{
+//		Rules[{EToken::Plus, EToken::Minus}] = &FParseRules::ParseExpressionAdditive;
+	}
+
+	bool ParseExpressionPrimary()
+	{
+		if (Tokenizer.Match(EToken::Integer) || Tokenizer.Match(EToken::Float))
+		{
+			printf(" LITERAL ");
+			return true;
+		}
+		else if (Tokenizer.Match(EToken::LeftParenthesis))
+		{
+			printf(" PAREN ");
+			if (!ParseExpression())
+			{
+				return false;
+			}
+
+			return Tokenizer.Match(EToken::RightParenthesis);
+		}
+		return true;
+	}
+
+	bool ParseExpressionUnary()
+	{
+		if (Tokenizer.PeekToken() == EToken::Minus)
+		{
+			printf(" UN ");
+			Tokenizer.Advance();
+		}
+
+		return ParseExpressionPrimary();
+	}
+
+	bool ParseExpressionMultiplicative()
+	{
+		if (!ParseExpressionUnary())
+		{
+			return false;
+		}
+
+		while (Tokenizer.PeekToken() == EToken::Multiply)
+		{
+			printf(" MUL ");
+			Tokenizer.Advance();
+			if (!ParseExpressionUnary())
+			{
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	bool ParseExpressionAdditive()
+	{
+		if (!ParseExpressionMultiplicative())
+		{
+			return false;
+		}
+
+		while (Tokenizer.PeekToken() == EToken::Plus || Tokenizer.PeekToken() == EToken::Minus)
+		{
+			printf(" ADD ");
+			Tokenizer.Advance();
+			if (!ParseExpressionMultiplicative())
+			{
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	bool ParseExpression()
+	{
+		if (!ParseExpressionAdditive())
+		{
+			return false;
+		}
+
+		if (Tokenizer.Match(EToken::Plus))
+		{
+
+		}
+
+		return true;
+	}
+};
+
+static bool Parse(std::vector<FToken>& Tokens)
+{
+	FTokenizer Tokenizer(Tokens);
+	FParseRules ParseRules(Tokenizer);
+	return ParseRules.ParseExpression();
+}
+
+static void LexAndParse(const std::string& Data)
 {
 	FLexer Lexer(Data);
 	std::vector<FToken> Tokens;
+	bool bError = false;
 	while (Lexer.HasMoreTokens())
 	{
 		FToken Token = Lexer.NextToken();
 		if (Token.TokenType == EToken::Error)
 		{
+			bError = true;
 			break;
 		}
 		Tokens.push_back(Token);
+	}
+
+	if (!bError)
+	{
+		Parse(Tokens);
 	}
 }
 
@@ -166,7 +326,7 @@ int main()
 {
 	std::string Data = Load(Filename.c_str());
 
-	Parse(Data);
+	LexAndParse(Data);
 
 	return 0;
 }

@@ -20,3 +20,4 @@
 #include <stack>
 #include <stdio.h>
 #include <assert.h>
+#include <functional>
