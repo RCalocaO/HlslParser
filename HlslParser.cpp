@@ -2,6 +2,7 @@
 //
 
 #include "stdafx.h"
+#include "HlslAST.h"
 
 std::string Filename = ".\\tests\\expr.hlsl";
 
@@ -38,6 +39,24 @@ enum class EToken
 	RightParenthesis,
 };
 
+FOperator::EType TokenToOperator(EToken Token)
+{
+	switch (Token)
+	{
+	case EToken::Minus:
+		return FOperator::Subtract;
+	case EToken::Multiply:
+		return FOperator::Mul;
+	case EToken::Plus:
+		return FOperator::Plus;
+	default:
+		assert(0);
+		break;
+	}
+	return FOperator::Error;
+}
+
+
 struct FToken
 {
 	FToken(EToken InTokenType = EToken::Error)
@@ -65,7 +84,6 @@ struct FLexer
 	void SkipWhiteSpace()
 	{
 		char c = *Data;
-		assert(c);
 		FToken Token;
 
 		while (Data < End && (c == ' ' || c == '\n' || c == '\t' || c == '\r'))
@@ -150,6 +168,8 @@ struct FLexer
 struct FTokenizer
 {
 	std::vector<FToken> Tokens;
+	FBase* Expression = nullptr;
+
 	FTokenizer(const std::vector<FToken>& InTokens)
 		: Tokens(InTokens)
 	{
@@ -193,13 +213,27 @@ struct FTokenizer
 
 		return EToken::Error;
 	}
+
+	const std::string& PreviousTokenString() const
+	{
+		assert(Current > 0);
+		return Tokens[Current - 1].Literal;
+	}
+
+	EToken PreviousTokenType() const
+	{
+		assert(Current > 0);
+		return Tokens[Current - 1].TokenType;
+	}
 };
 
 
 struct FParseRules
 {
+	std::list<FBase*> Values;
 //	std::map<std::vector<EToken>, std::function<bool(FParseRules&, FTokenizer& Tokenizer)>> Rules;
 	FTokenizer& Tokenizer;
+
 	FParseRules(FTokenizer& InTokenizer)
 		: Tokenizer(InTokenizer)
 	{
@@ -208,14 +242,24 @@ struct FParseRules
 
 	bool ParseExpressionPrimary()
 	{
-		if (Tokenizer.Match(EToken::Integer) || Tokenizer.Match(EToken::Float))
+		if (Tokenizer.Match(EToken::Integer))
 		{
-			printf(" LITERAL ");
+			auto* Node = new FConstant;
+			Node->Type = FConstant::Integer;
+			Node->IntValue = atoi(Tokenizer.PreviousTokenString().c_str());
+			Values.push_back(Node);
+			return true;
+		}
+		else if (Tokenizer.Match(EToken::Float))
+		{
+			auto* Node = new FConstant;
+			Node->Type = FConstant::Float;
+			Node->FloatValue = (float)atof(Tokenizer.PreviousTokenString().c_str());
+			Values.push_back(Node);
 			return true;
 		}
 		else if (Tokenizer.Match(EToken::LeftParenthesis))
 		{
-			printf(" PAREN ");
 			if (!ParseExpression())
 			{
 				return false;
@@ -228,13 +272,28 @@ struct FParseRules
 
 	bool ParseExpressionUnary()
 	{
-		if (Tokenizer.PeekToken() == EToken::Minus)
+		bool bUnaryMinus = false;
+		//if (Tokenizer.PeekToken() == EToken::Minus)
+		//{
+		//	bUnaryMinus = true;
+		//	Tokenizer.Advance();
+		//}
+
+		if (!ParseExpressionPrimary())
 		{
-			printf(" UN ");
-			Tokenizer.Advance();
+			return false;
 		}
 
-		return ParseExpressionPrimary();
+		if (bUnaryMinus)
+		{
+			auto* Node = new FOperator;
+			Node->Type = FOperator::UnaryMinus;
+			assert(!Values.empty());
+			Node->LHS = Values.back();
+			Values.pop_back();
+			Values.push_back(Node);
+		}
+		return true;
 	}
 
 	bool ParseExpressionMultiplicative()
@@ -246,12 +305,20 @@ struct FParseRules
 
 		while (Tokenizer.PeekToken() == EToken::Multiply)
 		{
-			printf(" MUL ");
 			Tokenizer.Advance();
+			auto* Node = new FOperator;
+			Node->Type = TokenToOperator(Tokenizer.PreviousTokenType());
 			if (!ParseExpressionUnary())
 			{
 				return false;
 			}
+
+			assert(Values.size() >= 2);
+			Node->RHS = Values.back();
+			Values.pop_back();
+			Node->LHS = Values.back();
+			Values.pop_back();
+			Values.push_back(Node);
 		}
 
 		return true;
@@ -266,12 +333,20 @@ struct FParseRules
 
 		while (Tokenizer.PeekToken() == EToken::Plus || Tokenizer.PeekToken() == EToken::Minus)
 		{
-			printf(" ADD ");
 			Tokenizer.Advance();
+			auto* Node = new FOperator;
+			Node->Type = TokenToOperator(Tokenizer.PreviousTokenType());
 			if (!ParseExpressionMultiplicative())
 			{
 				return false;
 			}
+
+			assert(Values.size() >= 2);
+			Node->RHS = Values.back();
+			Values.pop_back();
+			Node->LHS = Values.back();
+			Values.pop_back();
+			Values.push_back(Node);
 		}
 
 		return true;
@@ -282,11 +357,6 @@ struct FParseRules
 		if (!ParseExpressionAdditive())
 		{
 			return false;
-		}
-
-		if (Tokenizer.Match(EToken::Plus))
-		{
-
 		}
 
 		return true;
