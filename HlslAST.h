@@ -53,6 +53,8 @@ struct FOperator : public FBase
 		Subtract,
 		Mul,
 		UnaryMinus,
+
+		NumTypes,
 	} Type;
 
 	FBase* LHS;
@@ -61,6 +63,7 @@ struct FOperator : public FBase
 	virtual FOperator* AsOperator() override { return this; }
 	virtual void Write() override
 	{
+		printf(" (");
 		switch (Type)
 		{
 		case Plus:
@@ -86,5 +89,6 @@ struct FOperator : public FBase
 			assert(0);
 			break;
 		}
+		printf(") ");
 	}
 };

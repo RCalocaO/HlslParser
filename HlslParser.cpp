@@ -39,7 +39,7 @@ enum class EToken
 	RightParenthesis,
 };
 
-FOperator::EType TokenToOperator(EToken Token)
+FOperator::EType TokenToOperator(EToken Token, bool bAssertIfNotOperator)
 {
 	switch (Token)
 	{
@@ -50,7 +50,10 @@ FOperator::EType TokenToOperator(EToken Token)
 	case EToken::Plus:
 		return FOperator::Plus;
 	default:
-		assert(0);
+		if (bAssertIfNotOperator)
+		{
+			assert(0);
+		}
 		break;
 	}
 	return FOperator::Error;
@@ -228,24 +231,26 @@ struct FTokenizer
 };
 
 
-struct FParseRules
+struct FBaseParseRules
 {
 	std::list<FBase*> Values;
 //	std::map<std::vector<EToken>, std::function<bool(FParseRules&, FTokenizer& Tokenizer)>> Rules;
 	FTokenizer& Tokenizer;
 
-	FParseRules(FTokenizer& InTokenizer)
+	FBaseParseRules(FTokenizer& InTokenizer)
 		: Tokenizer(InTokenizer)
 	{
-//		Rules[{EToken::Plus, EToken::Minus}] = &FParseRules::ParseExpressionAdditive;
+	//		Rules[{EToken::Plus, EToken::Minus}] = &FParseRules::ParseExpressionAdditive;
 	}
-	
+
 	bool Error()
 	{
 		return false;
 	}
 
-	bool ParseExpressionPrimary()
+	virtual bool ParseExpression() = 0;
+
+	bool ParseTerminal()
 	{
 		if (Tokenizer.Match(EToken::Integer))
 		{
@@ -263,6 +268,24 @@ struct FParseRules
 			Values.push_back(Node);
 			return true;
 		}
+
+		return false;
+	}
+};
+
+struct FParseRulesRecursiveDescent : public FBaseParseRules
+{
+	FParseRulesRecursiveDescent(FTokenizer& InTokenizer)
+		: FBaseParseRules(InTokenizer)
+	{
+	}
+
+	bool ParseExpressionPrimary()
+	{
+		if (ParseTerminal())
+		{
+			return true;
+		}
 		else if (Tokenizer.Match(EToken::LeftParenthesis))
 		{
 			if (!ParseExpression())
@@ -272,7 +295,8 @@ struct FParseRules
 
 			return Tokenizer.Match(EToken::RightParenthesis);
 		}
-		return true;
+
+		return false;
 	}
 
 	bool ParseExpressionUnary()
@@ -312,7 +336,7 @@ struct FParseRules
 		{
 			Tokenizer.Advance();
 			auto* Node = new FOperator;
-			Node->Type = TokenToOperator(Tokenizer.PreviousTokenType());
+			Node->Type = TokenToOperator(Tokenizer.PreviousTokenType(), true);
 			if (!ParseExpressionUnary())
 			{
 				return Error();
@@ -340,7 +364,7 @@ struct FParseRules
 		{
 			Tokenizer.Advance();
 			auto* Node = new FOperator;
-			Node->Type = TokenToOperator(Tokenizer.PreviousTokenType());
+			Node->Type = TokenToOperator(Tokenizer.PreviousTokenType(), true);
 			if (!ParseExpressionMultiplicative())
 			{
 				return Error();
@@ -357,7 +381,7 @@ struct FParseRules
 		return true;
 	}
 
-	bool ParseExpression()
+	virtual bool ParseExpression() override
 	{
 		if (!ParseExpressionAdditive())
 		{
@@ -368,15 +392,139 @@ struct FParseRules
 	}
 };
 
+struct FParseRulesShuntingYard : public FBaseParseRules
+{
+	FParseRulesShuntingYard(FTokenizer& InTokenizer)
+		: FBaseParseRules(InTokenizer)
+	{
+	}
+
+	std::stack<FBase*> Operands;
+	std::stack<EToken> Operators;
+
+	int GetPrecedence(EToken Operator)
+	{
+		switch (Operator)
+		{
+		case EToken::Plus:
+			return 60;
+		case EToken::Minus:
+			return 70;
+		case EToken::Multiply:
+			return 90;
+		case EToken::LeftParenthesis:
+			return -65535;
+		default:
+			assert(0);
+			break;
+		}
+
+		return 0;
+	}
+
+	bool IsTopHasPrecedenceHigher(EToken Operator)
+	{
+		if (Operators.empty())
+		{
+			return false;
+		}
+
+		EToken Top = Operators.top();
+		return GetPrecedence(Top) >= GetPrecedence(Operator);
+	}
+
+	void PopOperator()
+	{
+		assert(!Operators.empty());
+		EToken Top = Operators.top();
+		Operators.pop();
+		FOperator* Operator = new FOperator;
+		Operator->Type = TokenToOperator(Top, true);
+		assert(Operands.size() >= 2);
+		Operator->RHS = Operands.top();
+		Operands.pop();
+		Operator->LHS = Operands.top();
+		Operands.pop();
+		Operands.push(Operator);
+	}
+
+	virtual bool ParseExpression() override
+	{
+		while (Tokenizer.HasMoreTokens())
+		{
+			EToken Token = Tokenizer.PeekToken();
+			if (ParseTerminal())
+			{
+				FBase* Terminal = Values.back();
+				Values.pop_back();
+				Operands.push(Terminal);
+			}
+			else if (Tokenizer.Match(EToken::LeftParenthesis))
+			{
+				Operators.push(EToken::LeftParenthesis);
+			}
+			else if (Tokenizer.Match(EToken::RightParenthesis))
+			{
+				while (!Operators.empty() && Operators.top() != EToken::LeftParenthesis)
+				{
+					PopOperator();
+				}
+				assert(!Operators.empty() && Operators.top() == EToken::LeftParenthesis);
+				Operators.pop();
+			}
+			else
+			{
+				FOperator::EType OperatorType = TokenToOperator(Token, false);
+				if (OperatorType != FOperator::Error)
+				{
+					Tokenizer.Advance();
+					while (IsTopHasPrecedenceHigher(Token))
+					{
+						PopOperator();
+					}
+
+					Operators.push(Token);
+				}
+			}
+		}
+
+		while (!Operators.empty())
+		{
+			assert(!Tokenizer.Match(EToken::LeftParenthesis));
+			PopOperator();
+		}
+
+		while (!Operands.empty())
+		{
+			Values.push_back(Operands.top());
+			Operands.pop();
+		}
+		return true;
+	}
+};
+
 static bool Parse(std::vector<FToken>& Tokens)
 {
-	FTokenizer Tokenizer(Tokens);
-	FParseRules ParseRules(Tokenizer);
-	bool bSuccess = ParseRules.ParseExpression();
-
-	for (auto* Value : ParseRules.Values)
+	bool bSuccess = false;
 	{
-		Value->Write();
+		FTokenizer Tokenizer(Tokens);
+		FParseRulesRecursiveDescent ParseRules(Tokenizer);
+		bSuccess = ParseRules.ParseExpression();
+		for (auto* Value : ParseRules.Values)
+		{
+			Value->Write();
+		}
+		printf("\n");
+	}
+	{
+		FTokenizer Tokenizer(Tokens);
+		FParseRulesShuntingYard ParseRules(Tokenizer);
+		bSuccess = ParseRules.ParseExpression();
+		for (auto* Value : ParseRules.Values)
+		{
+			Value->Write();
+			printf("\n");
+		}
 	}
 	return bSuccess;
 }
