@@ -239,6 +239,11 @@ struct FParseRules
 	{
 //		Rules[{EToken::Plus, EToken::Minus}] = &FParseRules::ParseExpressionAdditive;
 	}
+	
+	bool Error()
+	{
+		return false;
+	}
 
 	bool ParseExpressionPrimary()
 	{
@@ -262,7 +267,7 @@ struct FParseRules
 		{
 			if (!ParseExpression())
 			{
-				return false;
+				return Error();
 			}
 
 			return Tokenizer.Match(EToken::RightParenthesis);
@@ -273,15 +278,15 @@ struct FParseRules
 	bool ParseExpressionUnary()
 	{
 		bool bUnaryMinus = false;
-		//if (Tokenizer.PeekToken() == EToken::Minus)
-		//{
-		//	bUnaryMinus = true;
-		//	Tokenizer.Advance();
-		//}
+		if (Tokenizer.PeekToken() == EToken::Minus)
+		{
+			bUnaryMinus = true;
+			Tokenizer.Advance();
+		}
 
 		if (!ParseExpressionPrimary())
 		{
-			return false;
+			return Error();
 		}
 
 		if (bUnaryMinus)
@@ -300,7 +305,7 @@ struct FParseRules
 	{
 		if (!ParseExpressionUnary())
 		{
-			return false;
+			return Error();
 		}
 
 		while (Tokenizer.PeekToken() == EToken::Multiply)
@@ -310,7 +315,7 @@ struct FParseRules
 			Node->Type = TokenToOperator(Tokenizer.PreviousTokenType());
 			if (!ParseExpressionUnary())
 			{
-				return false;
+				return Error();
 			}
 
 			assert(Values.size() >= 2);
@@ -328,7 +333,7 @@ struct FParseRules
 	{
 		if (!ParseExpressionMultiplicative())
 		{
-			return false;
+			return Error();
 		}
 
 		while (Tokenizer.PeekToken() == EToken::Plus || Tokenizer.PeekToken() == EToken::Minus)
@@ -338,7 +343,7 @@ struct FParseRules
 			Node->Type = TokenToOperator(Tokenizer.PreviousTokenType());
 			if (!ParseExpressionMultiplicative())
 			{
-				return false;
+				return Error();
 			}
 
 			assert(Values.size() >= 2);
@@ -356,7 +361,7 @@ struct FParseRules
 	{
 		if (!ParseExpressionAdditive())
 		{
-			return false;
+			return Error();
 		}
 
 		return true;
@@ -367,11 +372,19 @@ static bool Parse(std::vector<FToken>& Tokens)
 {
 	FTokenizer Tokenizer(Tokens);
 	FParseRules ParseRules(Tokenizer);
-	return ParseRules.ParseExpression();
+	bool bSuccess = ParseRules.ParseExpression();
+
+	for (auto* Value : ParseRules.Values)
+	{
+		Value->Write();
+	}
+	return bSuccess;
 }
 
-static void LexAndParse(const std::string& Data)
+int main()
 {
+	std::string Data = Load(Filename.c_str());
+
 	FLexer Lexer(Data);
 	std::vector<FToken> Tokens;
 	bool bError = false;
@@ -386,17 +399,15 @@ static void LexAndParse(const std::string& Data)
 		Tokens.push_back(Token);
 	}
 
-	if (!bError)
+	if (bError)
 	{
-		Parse(Tokens);
+		return 1;
 	}
-}
 
-int main()
-{
-	std::string Data = Load(Filename.c_str());
-
-	LexAndParse(Data);
+	if (!Parse(Tokens))
+	{
+		return 1;
+	}
 
 	return 0;
 }
