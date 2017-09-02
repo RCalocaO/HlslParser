@@ -300,6 +300,8 @@ struct FBaseParseRules
 	}
 };
 
+
+// http://www.engr.mun.ca/~theo/Misc/exp_parsing.htm
 struct FParseRulesRecursiveDescent : public FBaseParseRules
 {
 	FParseRulesRecursiveDescent(FTokenizer& InTokenizer)
@@ -690,6 +692,112 @@ struct FParseRulesShuntingYard2 : public FBaseParseRules
 	}
 };
 
+struct FParseRulesClassicRecursiveDescent : public FBaseParseRules
+{
+	FParseRulesClassicRecursiveDescent(FTokenizer& InTokenizer)
+		: FBaseParseRules(InTokenizer)
+	{
+	}
+
+	void MakeBinaryOp(EToken Token)
+	{
+		FOperator* Operator = new FOperator;
+		Operator->Type = TokenToBinaryOperator(Token, false);
+		assert(Values.size() >= 2);
+		Operator->RHS = Values.back();
+		Values.pop_back();
+		Operator->LHS = Values.back();
+		Values.pop_back();
+		Values.push_back(Operator);
+	}
+
+	bool E()
+	{
+		if (!T())
+		{
+			return false;
+		}
+		while (Tokenizer.PeekToken() == EToken::Plus || Tokenizer.PeekToken() == EToken::Minus)
+		{
+			EToken Token = Tokenizer.PeekToken();
+			Tokenizer.Advance();
+			if (!T())
+			{
+				return false;
+			}
+			MakeBinaryOp(Token);
+		}
+		return true;
+	}
+
+	bool T()
+	{
+		if (!F())
+		{
+			return false;
+		}
+		while (Tokenizer.PeekToken() == EToken::Multiply)
+		{
+			EToken Token = Tokenizer.PeekToken();
+			Tokenizer.Advance();
+			if (!F())
+			{
+				return false;
+			}
+			MakeBinaryOp(Token);
+		}
+		return true;
+	}
+
+	bool F()
+	{
+		if (!P())
+		{
+			return false;
+		}
+		// ^
+		return true;
+	}
+
+	bool P()
+	{
+		if (ParseTerminal())
+		{
+		}
+		else if (Tokenizer.PeekToken() == EToken::LeftParenthesis)
+		{
+			Tokenizer.Advance();
+			if (!E())
+			{
+				return false;
+			}
+			if (!Tokenizer.Match(EToken::RightParenthesis))
+			{
+				assert(0);
+				return false;
+			}
+		}
+		else if (Tokenizer.PeekToken() == EToken::Minus)
+		{
+			Tokenizer.Advance();
+			// Unary minus
+
+		}
+		else
+		{
+			assert(0);
+			return false;
+		}
+		return true;
+	}
+
+
+	virtual bool ParseExpression() override
+	{
+		return E();
+	}
+};
+
 static bool Parse(std::vector<FToken>& Tokens)
 {
 	bool bSuccess = false;
@@ -720,6 +828,17 @@ static bool Parse(std::vector<FToken>& Tokens)
 		FParseRulesShuntingYard2 ParseRules(Tokenizer);
 		bSuccess = ParseRules.ParseExpression();
 		printf("Shunting yard v2\n");
+		for (auto* Value : ParseRules.Values)
+		{
+			Value->Write();
+			printf("\n");
+		}
+	}
+	{
+		FTokenizer Tokenizer(Tokens);
+		FParseRulesClassicRecursiveDescent ParseRules(Tokenizer);
+		bSuccess = ParseRules.ParseExpression();
+		printf("Classical recursive descent\n");
 		for (auto* Value : ParseRules.Values)
 		{
 			Value->Write();
