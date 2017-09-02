@@ -53,9 +53,38 @@ struct FOperator : public FBase
 		Subtract,
 		Mul,
 		UnaryMinus,
+		UnaryPlus,
 
 		NumTypes,
+		Sentinel = NumTypes,
 	} Type;
+
+	static bool IsUnary(EType Type)
+	{
+		switch (Type)
+		{
+		case UnaryPlus:
+		case UnaryMinus:
+			return true;
+		default:
+			break;
+		}
+		return false;
+	}
+
+	static bool IsBinary(EType Type)
+	{
+		switch (Type)
+		{
+		case Plus:
+		case Subtract:
+		case Mul:
+			return true;
+		default:
+			break;
+		}
+		return false;
+	}
 
 	FBase* LHS;
 	FBase* RHS;

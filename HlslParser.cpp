@@ -39,7 +39,7 @@ enum class EToken
 	RightParenthesis,
 };
 
-FOperator::EType TokenToOperator(EToken Token, bool bAssertIfNotOperator)
+FOperator::EType TokenToBinaryOperator(EToken Token, bool bAssertIfNotOperator)
 {
 	switch (Token)
 	{
@@ -59,6 +59,33 @@ FOperator::EType TokenToOperator(EToken Token, bool bAssertIfNotOperator)
 	return FOperator::Error;
 }
 
+bool IsBinaryOperator(EToken Token)
+{
+	return TokenToBinaryOperator(Token, false) != FOperator::Error;
+}
+
+FOperator::EType TokenToUnaryOperator(EToken Token, bool bAssertIfNotOperator)
+{
+	switch (Token)
+	{
+	case EToken::Minus:
+		return FOperator::UnaryMinus;
+	case EToken::Plus:
+		return FOperator::UnaryPlus;
+	default:
+		if (bAssertIfNotOperator)
+		{
+			assert(0);
+		}
+		break;
+	}
+	return FOperator::Error;
+}
+
+bool IsUnaryOperator(EToken Token)
+{
+	return TokenToUnaryOperator(Token, false) != FOperator::Error;
+}
 
 struct FToken
 {
@@ -336,7 +363,7 @@ struct FParseRulesRecursiveDescent : public FBaseParseRules
 		{
 			Tokenizer.Advance();
 			auto* Node = new FOperator;
-			Node->Type = TokenToOperator(Tokenizer.PreviousTokenType(), true);
+			Node->Type = TokenToBinaryOperator(Tokenizer.PreviousTokenType(), true);
 			if (!ParseExpressionUnary())
 			{
 				return Error();
@@ -364,7 +391,7 @@ struct FParseRulesRecursiveDescent : public FBaseParseRules
 		{
 			Tokenizer.Advance();
 			auto* Node = new FOperator;
-			Node->Type = TokenToOperator(Tokenizer.PreviousTokenType(), true);
+			Node->Type = TokenToBinaryOperator(Tokenizer.PreviousTokenType(), true);
 			if (!ParseExpressionMultiplicative())
 			{
 				return Error();
@@ -439,7 +466,7 @@ struct FParseRulesShuntingYard : public FBaseParseRules
 		EToken Top = Operators.top();
 		Operators.pop();
 		FOperator* Operator = new FOperator;
-		Operator->Type = TokenToOperator(Top, true);
+		Operator->Type = TokenToBinaryOperator(Top, true);
 		assert(Operands.size() >= 2);
 		Operator->RHS = Operands.top();
 		Operands.pop();
@@ -474,7 +501,7 @@ struct FParseRulesShuntingYard : public FBaseParseRules
 			}
 			else
 			{
-				FOperator::EType OperatorType = TokenToOperator(Token, false);
+				FOperator::EType OperatorType = TokenToBinaryOperator(Token, false);
 				if (OperatorType != FOperator::Error)
 				{
 					Tokenizer.Advance();
@@ -503,6 +530,166 @@ struct FParseRulesShuntingYard : public FBaseParseRules
 	}
 };
 
+struct FParseRulesShuntingYard2 : public FBaseParseRules
+{
+	FParseRulesShuntingYard2(FTokenizer& InTokenizer)
+		: FBaseParseRules(InTokenizer)
+	{
+	}
+
+	std::stack<FBase*> Operands;
+	std::stack<FOperator::EType> Operators;
+
+	void PopOperator()
+	{
+		assert(!Operators.empty());
+		FOperator::EType Top = Operators.top();
+		Operators.pop();
+		if (FOperator::IsBinary(Top))
+		{
+			FOperator* Operator = new FOperator;
+			Operator->Type = Top;
+			assert(Operands.size() >= 2);
+			Operator->RHS = Operands.top();
+			Operands.pop();
+			Operator->LHS = Operands.top();
+			Operands.pop();
+			Operands.push(Operator);
+		}
+		else if (FOperator::IsUnary(Top))
+		{
+			FOperator* Operator = new FOperator;
+			Operator->Type = Top;
+			assert(!Operands.empty());
+			Operator->LHS = Operands.top();
+			Operands.pop();
+			Operands.push(Operator);
+		}
+		else
+		{
+			assert(0);
+		}
+	}
+
+	virtual bool ParseExpression() override
+	{
+		PushOperator(FOperator::Sentinel);
+		if (!E())
+		{
+			return false;
+		}
+		while (!Operands.empty())
+		{
+			Values.push_back(Operands.top());
+			Operands.pop();
+		}
+
+		return true;
+	}
+
+	int GetPrecedence(FOperator::EType Operator)
+	{
+		switch (Operator)
+		{
+		case FOperator::Plus:
+		case FOperator::Subtract:
+			return 60;
+		case FOperator::Mul:
+			return 70;
+		case FOperator::UnaryPlus:
+		case FOperator::UnaryMinus:
+			return 100;
+		default:
+			assert(0);
+			break;
+		}
+
+		return 0;
+	}
+
+	void PushOperator(FOperator::EType Operator)
+	{
+		if (Operator != FOperator::Sentinel)
+		{
+			while (!Operators.empty() && Operators.top() != FOperator::Sentinel && GetPrecedence(Operators.top()) > GetPrecedence(Operator))
+			{
+				PopOperator();
+			}
+		}
+
+		Operators.push(Operator);
+	}
+
+	bool E()
+	{
+		if (!P())
+		{
+			return false;
+		}
+		while (IsBinaryOperator(Tokenizer.PeekToken()))
+		{
+			PushOperator(TokenToBinaryOperator(Tokenizer.PeekToken(), false));
+			Tokenizer.Advance();
+			if (!P())
+			{
+				return false;
+			}
+		}
+
+		while (!Operators.empty() && Operators.top() != FOperator::Sentinel)
+		{
+			PopOperator();
+		}
+		return true;
+	}
+
+	void PushOperand()
+	{
+		assert(!Values.empty());
+		FBase* Operand = Values.back();
+		Values.pop_back();
+		Operands.push(Operand);
+	}
+
+	bool P()
+	{
+		EToken Next = Tokenizer.PeekToken();
+		if (ParseTerminal())
+		{
+			PushOperand();
+		}
+		else if (Next == EToken::LeftParenthesis)
+		{
+			Tokenizer.Advance();
+			PushOperator(FOperator::Sentinel);
+			E();
+			if (Tokenizer.Match(EToken::RightParenthesis))
+			{
+				assert(!Operators.empty());
+				assert(Operators.top() == FOperator::Sentinel);
+				Operators.pop();
+			}
+			else
+			{
+				assert(0);
+				return false;
+			}
+		}
+		else if (IsUnaryOperator(Next))
+		{
+			PushOperator(TokenToUnaryOperator(Next, false));
+			Tokenizer.Advance();
+			P();
+		}
+		else
+		{
+			assert(0);
+			return false;
+		}
+		return true;
+	}
+};
+
 static bool Parse(std::vector<FToken>& Tokens)
 {
 	bool bSuccess = false;
@@ -510,6 +697,7 @@ static bool Parse(std::vector<FToken>& Tokens)
 		FTokenizer Tokenizer(Tokens);
 		FParseRulesRecursiveDescent ParseRules(Tokenizer);
 		bSuccess = ParseRules.ParseExpression();
+		printf("Recursive Descent\n");
 		for (auto* Value : ParseRules.Values)
 		{
 			Value->Write();
@@ -520,6 +708,18 @@ static bool Parse(std::vector<FToken>& Tokens)
 		FTokenizer Tokenizer(Tokens);
 		FParseRulesShuntingYard ParseRules(Tokenizer);
 		bSuccess = ParseRules.ParseExpression();
+		printf("Shunting yard v1\n");
+		for (auto* Value : ParseRules.Values)
+		{
+			Value->Write();
+			printf("\n");
+		}
+	}
+	{
+		FTokenizer Tokenizer(Tokens);
+		FParseRulesShuntingYard2 ParseRules(Tokenizer);
+		bSuccess = ParseRules.ParseExpression();
+		printf("Shunting yard v2\n");
 		for (auto* Value : ParseRules.Values)
 		{
 			Value->Write();
