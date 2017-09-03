@@ -541,14 +541,14 @@ struct FParseRulesPrecedenceClimbing : public FBaseParseRules
 
 	bool AssociativityIsRight(FOperator::EType Operator)
 	{
-		//switch (Operator)
-		//{
-		//case FOperator::UnaryPlus:
-		//case FOperator::UnaryMinus:
-		//	return true;
-		//default:
-		//	break;
-		//}
+		switch (Operator)
+		{
+		case FOperator::UnaryPlus:
+		case FOperator::UnaryMinus:
+			return true;
+		default:
+			break;
+		}
 
 		return false;
 	}
