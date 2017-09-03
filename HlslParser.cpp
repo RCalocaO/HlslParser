@@ -476,6 +476,121 @@ struct FParseRulesClassicRecursiveDescent : public FBaseParseRules
 	}
 };
 
+struct FParseRulesPrecedenceClimbing : public FBaseParseRules
+{
+	FParseRulesPrecedenceClimbing(FTokenizer& InTokenizer)
+		: FBaseParseRules(InTokenizer)
+	{
+	}
+
+	virtual bool ParseExpression() override
+	{
+		FBase* t = Exp(0);
+		if (!t)
+		{
+			return false;
+		}
+
+		Values.push_back(t);
+		return true;
+	}
+
+	int Prec(FOperator::EType Operator)
+	{
+		switch (Operator)
+		{
+		case FOperator::Plus:
+		case FOperator::Subtract:
+			return 60;
+		case FOperator::Mul:
+			return 70;
+		case FOperator::UnaryPlus:
+		case FOperator::UnaryMinus:
+			return 100;
+		default:
+			assert(0);
+			break;
+		}
+
+		return 0;
+	}
+
+	FBase* Exp(int p)
+	{
+		FBase* t = P();
+		if (!t)
+		{
+			return nullptr;
+		}
+
+		while (IsBinaryOperator(Tokenizer.PeekToken()) && Prec(TokenToBinaryOperator(Tokenizer.PeekToken(), false)) >= p)
+		{
+			FOperator::EType Op = TokenToBinaryOperator(Tokenizer.PeekToken(), true);
+			Tokenizer.Advance();
+			int q = (AssociativityIsRight(Op) ? 0 : 1) + Prec(Op);
+			FBase* t1 = Exp(q);
+			if (!t1)
+			{
+				return nullptr;
+			}
+			t = MakeOperator(Op, t, t1);
+		}
+
+		return t;
+	}
+
+	bool AssociativityIsRight(FOperator::EType Operator)
+	{
+		//switch (Operator)
+		//{
+		//case FOperator::UnaryPlus:
+		//case FOperator::UnaryMinus:
+		//	return true;
+		//default:
+		//	break;
+		//}
+
+		return false;
+	}
+
+	FOperator* MakeOperator(FOperator::EType Type, FBase* LHS, FBase* RHS = nullptr)
+	{
+		FOperator* Operator = new FOperator;
+		Operator->Type = Type;
+		Operator->LHS = LHS;
+		Operator->RHS = RHS;
+		return Operator;
+	}
+
+	FBase* P()
+	{
+		if (IsUnaryOperator(Tokenizer.PeekToken()))
+		{
+			FOperator::EType Op = TokenToUnaryOperator(Tokenizer.PeekToken(), true);
+			Tokenizer.Advance();
+			int q = Prec(Op);
+			FBase* t = Exp(q);
+			return MakeOperator(Op, t);
+		}
+		else if (Tokenizer.Match(EToken::LeftParenthesis))
+		{
+			FBase* t = Exp(0);
+			bool bMatchRP = Tokenizer.Match(EToken::RightParenthesis);
+			assert(bMatchRP);
+			return t;
+		}
+		else if (ParseTerminal())
+		{
+			assert(!Values.empty());
+			FBase* Terminal = Values.back();
+			Values.pop_back();
+			return Terminal;
+		}
+		
+		return nullptr;
+	}
+};
+
 static bool Parse(std::vector<FToken>& Tokens)
 {
 	bool bSuccess = false;
@@ -506,6 +621,17 @@ static bool Parse(std::vector<FToken>& Tokens)
 		FParseRulesClassicRecursiveDescent ParseRules(Tokenizer);
 		bSuccess = ParseRules.ParseExpression();
 		printf("Classical recursive descent\n");
+		for (auto* Value : ParseRules.Values)
+		{
+			Value->Write();
+			printf("\n");
+		}
+	}
+	{
+		FTokenizer Tokenizer(Tokens);
+		FParseRulesPrecedenceClimbing ParseRules(Tokenizer);
+		bSuccess = ParseRules.ParseExpression();
+		printf("Precedence climbing\n");
 		for (auto* Value : ParseRules.Values)
 		{
 			Value->Write();
