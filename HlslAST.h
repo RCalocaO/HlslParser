@@ -110,6 +110,10 @@ struct FOperator : public FBase
 			printf(" * ");
 			RHS->Write();
 			break;
+		case UnaryPlus:
+			printf(" +");
+			LHS->Write();
+			break;
 		case UnaryMinus:
 			printf(" -");
 			LHS->Write();

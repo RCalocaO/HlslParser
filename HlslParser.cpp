@@ -105,10 +105,10 @@ struct FParseRulesRecursiveDescent : public FBaseParseRules
 
 	bool ParseExpressionUnary()
 	{
-		bool bUnaryMinus = false;
-		if (Tokenizer.PeekToken() == EToken::Minus)
+		FOperator::EType UnaryOp = FOperator::Sentinel;
+		if (Tokenizer.PeekToken() == EToken::Minus || Tokenizer.PeekToken() == EToken::Plus)
 		{
-			bUnaryMinus = true;
+			UnaryOp = TokenToUnaryOperator(Tokenizer.PeekToken(), false);
 			Tokenizer.Advance();
 		}
 
@@ -117,10 +117,10 @@ struct FParseRulesRecursiveDescent : public FBaseParseRules
 			return Error();
 		}
 
-		if (bUnaryMinus)
+		if (UnaryOp != FOperator::Sentinel)
 		{
 			auto* Node = new FOperator;
-			Node->Type = FOperator::UnaryMinus;
+			Node->Type = UnaryOp;
 			assert(!Values.empty());
 			Node->LHS = Values.back();
 			Values.pop_back();
@@ -596,11 +596,24 @@ void DoParse(std::vector<FToken>& Tokens, const char* ParserName)
 {
 	FTokenizer Tokenizer(Tokens);
 	TParser ParseRules(Tokenizer);
-	ParseRules.ParseExpression();
+	while (Tokenizer.HasMoreTokens())
+	{
+		if (!ParseRules.ParseExpression())
+		{
+			printf("Failed!\n");
+			break;
+		}
+		if (!Tokenizer.Match(EToken::Semicolon))
+		{
+			printf("Failed!\n");
+			break;
+		}
+	}
 	printf("%s\n", ParserName);
 	for (auto* Value : ParseRules.Values)
 	{
 		Value->Write();
+		printf("\n");
 	}
 	printf("\n");
 }
