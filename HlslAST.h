@@ -16,12 +16,13 @@ struct FConstant : public FBase
 	enum EType
 	{
 		Integer,
+		HexInteger,
 		Float,
 	} Type;
 
 	union
 	{
-		uint32_t IntValue;
+		uint32_t UIntValue;
 		float FloatValue;
 	};
 
@@ -31,7 +32,10 @@ struct FConstant : public FBase
 		switch (Type)
 		{
 		case Integer:
-			printf("%d ", IntValue);
+			printf("%u ", UIntValue);
+			break;
+		case HexInteger:
+			printf("0x%x ", UIntValue);
 			break;
 		case Float:
 			printf("%f", FloatValue);

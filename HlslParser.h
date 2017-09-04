@@ -6,6 +6,7 @@ enum class EToken
 	Error,
 	Semicolon,
 	Integer,
+	HexInteger,
 	Float,
 	Plus,
 	Multiply,
@@ -64,6 +65,54 @@ struct FLexer
 		return true;
 	}
 
+	bool TryParseHexInteger(FToken& Token)
+	{
+		const char* TempData = Data + 1;
+		if (*TempData == 'x' || *TempData == 'X')
+		{
+			uint32_t Value = 0;
+			++TempData;
+			while (TempData < End)
+			{
+				if (isdigit(*TempData))
+				{
+					Value *= 16;
+					Value += *TempData - '0';
+					++TempData;
+				}
+				else if (*TempData >= 'a' && *TempData <= 'f')
+				{
+					Value *= 16;
+					Value += *TempData - 'a' + 10;
+					++TempData;
+				}
+				else if (*TempData >= 'A' && *TempData <= 'F')
+				{
+					Value *= 16;
+					Value += *TempData - 'A' + 10;
+					++TempData;
+				}
+				else
+				{
+					break;
+				}
+			}
+
+			Token.TokenType = EToken::HexInteger;
+			do
+			{
+				Token.Literal += (Value % 10) + '0';
+				Value /= 10;
+			}
+			while (Value > 0);
+			std::reverse(Token.Literal.begin(), Token.Literal.end());
+			Data = TempData;
+			return true;
+		}
+
+		return false;
+	}
+
 	FToken NextToken()
 	{
 		FToken Token;
@@ -74,36 +123,39 @@ struct FLexer
 		c = *Data;
 		if (isdigit(c))
 		{
-			do
+			if (!TryParseHexInteger(Token))
 			{
-				Token.Literal += *Data;
-				++Data;
-			} while (isdigit(*Data));
-
-			Token.TokenType = EToken::Integer;
-
-			if (*Data == '.')
-			{
-				Token.Literal += *Data++;
-				Token.TokenType = EToken::Float;
-				while (isdigit(*Data))
+				do
 				{
 					Token.Literal += *Data;
 					++Data;
-				}
-			}
+				} while (isdigit(*Data));
 
-			if (*Data == 'e' || *Data == 'E')
-			{
-				Token.Literal += *Data++;
-				if (*Data == '-' || *Data == '+')
+				Token.TokenType = EToken::Integer;
+
+				if (*Data == '.')
 				{
 					Token.Literal += *Data++;
+					Token.TokenType = EToken::Float;
+					while (isdigit(*Data))
+					{
+						Token.Literal += *Data;
+						++Data;
+					}
 				}
-				while (isdigit(*Data))
+
+				if (*Data == 'e' || *Data == 'E')
 				{
-					Token.Literal += *Data;
-					++Data;
+					Token.Literal += *Data++;
+					if (*Data == '-' || *Data == '+')
+					{
+						Token.Literal += *Data++;
+					}
+					while (isdigit(*Data))
+					{
+						Token.Literal += *Data;
+						++Data;
+					}
 				}
 			}
 		}
@@ -139,6 +191,11 @@ struct FTokenizer
 	}
 
 	uint32_t Current = 0;
+
+	static uint32_t ConvertHex(const char* String)
+	{
+		return 0;
+	}
 
 	bool HasMoreTokens() const
 	{

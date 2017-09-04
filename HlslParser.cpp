@@ -53,7 +53,15 @@ struct FBaseParseRules
 		{
 			auto* Node = new FConstant;
 			Node->Type = FConstant::Integer;
-			Node->IntValue = atoi(Tokenizer.PreviousTokenString().c_str());
+			Node->UIntValue = atoi(Tokenizer.PreviousTokenString().c_str());
+			PushTerminal(Node);
+			return true;
+		}
+		else if (Tokenizer.Match(EToken::HexInteger))
+		{
+			auto* Node = new FConstant;
+			Node->Type = FConstant::HexInteger;
+			Node->UIntValue = (uint32_t)atoll(Tokenizer.PreviousTokenString().c_str());
 			PushTerminal(Node);
 			return true;
 		}
