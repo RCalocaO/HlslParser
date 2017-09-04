@@ -136,7 +136,7 @@ struct FParseRulesRecursiveDescent : public FBaseParseRules
 			return Error();
 		}
 
-		while (Tokenizer.PeekToken() == EToken::Multiply)
+		while (Tokenizer.PeekToken() == EToken::Multiply || Tokenizer.PeekToken() == EToken::Divide || Tokenizer.PeekToken() == EToken::Mod)
 		{
 			Tokenizer.Advance();
 			auto* Node = new FOperator;
@@ -412,7 +412,7 @@ struct FParseRulesClassicRecursiveDescent : public FBaseParseRules
 		{
 			return false;
 		}
-		while (Tokenizer.PeekToken() == EToken::Multiply)
+		while (Tokenizer.PeekToken() == EToken::Multiply || Tokenizer.PeekToken() == EToken::Divide || Tokenizer.PeekToken() == EToken::Mod)
 		{
 			EToken Token = Tokenizer.PeekToken();
 			Tokenizer.Advance();
