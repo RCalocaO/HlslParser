@@ -4,6 +4,7 @@
 enum class EToken
 {
 	Error,
+	Semicolon,
 	Integer,
 	Float,
 	Plus,
@@ -69,7 +70,12 @@ struct FLexer
 		char c = *Data;
 		assert(c);
 		c = *Data;
-		if (isdigit(c))
+		if (c == ';')
+		{
+			Token.TokenType = EToken::Semicolon;
+			++Data;
+		}
+		else if (isdigit(c))
 		{
 			do
 			{

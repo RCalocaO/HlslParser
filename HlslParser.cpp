@@ -591,83 +591,56 @@ struct FParseRulesPrecedenceClimbing : public FBaseParseRules
 	}
 };
 
-static bool Parse(std::vector<FToken>& Tokens)
+template <typename TParser>
+void DoParse(std::vector<FToken>& Tokens, const char* ParserName)
 {
-	bool bSuccess = false;
+	FTokenizer Tokenizer(Tokens);
+	TParser ParseRules(Tokenizer);
+	ParseRules.ParseExpression();
+	printf("%s\n", ParserName);
+	for (auto* Value : ParseRules.Values)
 	{
-		FTokenizer Tokenizer(Tokens);
-		FParseRulesRecursiveDescent ParseRules(Tokenizer);
-		bSuccess = ParseRules.ParseExpression();
-		printf("Recursive Descent\n");
-		for (auto* Value : ParseRules.Values)
-		{
-			Value->Write();
-		}
-		printf("\n");
+		Value->Write();
 	}
-	{
-		FTokenizer Tokenizer(Tokens);
-		FParseRulesShuntingYard2 ParseRules(Tokenizer);
-		bSuccess = ParseRules.ParseExpression();
-		printf("Shunting yard v2\n");
-		for (auto* Value : ParseRules.Values)
-		{
-			Value->Write();
-			printf("\n");
-		}
-	}
-	{
-		FTokenizer Tokenizer(Tokens);
-		FParseRulesClassicRecursiveDescent ParseRules(Tokenizer);
-		bSuccess = ParseRules.ParseExpression();
-		printf("Classical recursive descent\n");
-		for (auto* Value : ParseRules.Values)
-		{
-			Value->Write();
-			printf("\n");
-		}
-	}
-	{
-		FTokenizer Tokenizer(Tokens);
-		FParseRulesPrecedenceClimbing ParseRules(Tokenizer);
-		bSuccess = ParseRules.ParseExpression();
-		printf("Precedence climbing\n");
-		for (auto* Value : ParseRules.Values)
-		{
-			Value->Write();
-			printf("\n");
-		}
-	}
-	return bSuccess;
+	printf("\n");
 }
 
-int main()
+static void Parse(std::vector<FToken>& Tokens)
 {
-	std::string Data = Load(Filename.c_str());
+	DoParse<FParseRulesRecursiveDescent>(Tokens, "Recursive Descent");
+	DoParse<FParseRulesShuntingYard2>(Tokens, "Shunting Yard");
+	DoParse<FParseRulesClassicRecursiveDescent>(Tokens, "Classical Recursive Descent");
+	DoParse<FParseRulesPrecedenceClimbing>(Tokens, "Precedence climbing");
+}
 
+bool Lex(std::string& Data, std::vector<FToken>& OutTokens)
+{
 	FLexer Lexer(Data);
-	std::vector<FToken> Tokens;
 	bool bError = false;
 	while (Lexer.HasMoreTokens())
 	{
 		FToken Token = Lexer.NextToken();
 		if (Token.TokenType == EToken::Error)
 		{
-			bError = true;
+			return false;
 			break;
 		}
-		Tokens.push_back(Token);
+		OutTokens.push_back(Token);
 	}
+	return true;
+}
 
-	if (bError)
+int main()
+{
+	std::string Data = Load(Filename.c_str());
+
+	std::vector<FToken> Tokens;
+	if (!Lex(Data, Tokens))
 	{
 		return 1;
 	}
 
-	if (!Parse(Tokens))
-	{
-		return 1;
-	}
+	Parse(Tokens);
 
 	return 0;
 }
