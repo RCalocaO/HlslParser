@@ -257,10 +257,12 @@ struct FParseRulesShuntingYard2 : public FBaseParseRules
 	{
 		switch (Operator)
 		{
-		case FOperator::Plus:
+		case FOperator::Add:
 		case FOperator::Subtract:
 			return 60;
 		case FOperator::Mul:
+		case FOperator::Divide:
+		case FOperator::Remainder:
 			return 70;
 		case FOperator::UnaryPlus:
 		case FOperator::UnaryMinus:
@@ -499,7 +501,7 @@ struct FParseRulesPrecedenceClimbing : public FBaseParseRules
 	{
 		switch (Operator)
 		{
-		case FOperator::Plus:
+		case FOperator::Add:
 		case FOperator::Subtract:
 			return 60;
 		case FOperator::Mul:

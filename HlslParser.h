@@ -9,6 +9,8 @@ enum class EToken
 	Float,
 	Plus,
 	Multiply,
+	Divide,
+	Mod,
 	Minus,
 	LeftParenthesis,
 	RightParenthesis,
@@ -70,12 +72,7 @@ struct FLexer
 		char c = *Data;
 		assert(c);
 		c = *Data;
-		if (c == ';')
-		{
-			Token.TokenType = EToken::Semicolon;
-			++Data;
-		}
-		else if (isdigit(c))
+		if (isdigit(c))
 		{
 			do
 			{
@@ -115,10 +112,13 @@ struct FLexer
 			switch (c)
 			{
 			case '+': ++Data; Token.TokenType = EToken::Plus; break;
-			case '*': ++Data; Token.TokenType = EToken::Multiply; break;
 			case '-': ++Data; Token.TokenType = EToken::Minus; break;
+			case '*': ++Data; Token.TokenType = EToken::Multiply; break;
+			case '/': ++Data; Token.TokenType = EToken::Divide; break;
+			case '%': ++Data; Token.TokenType = EToken::Mod; break;
 			case '(': ++Data; Token.TokenType = EToken::LeftParenthesis; break;
 			case ')': ++Data; Token.TokenType = EToken::RightParenthesis; break;
+			case ';': ++Data; Token.TokenType = EToken::Semicolon; break;
 			default:
 				break;
 			}
@@ -195,12 +195,16 @@ inline FOperator::EType TokenToBinaryOperator(EToken Token, bool bAssertIfNotOpe
 {
 	switch (Token)
 	{
+	case EToken::Plus:
+		return FOperator::Add;
 	case EToken::Minus:
 		return FOperator::Subtract;
 	case EToken::Multiply:
 		return FOperator::Mul;
-	case EToken::Plus:
-		return FOperator::Plus;
+	case EToken::Divide:
+		return FOperator::Divide;
+	case EToken::Mod:
+		return FOperator::Remainder;
 	default:
 		if (bAssertIfNotOperator)
 		{

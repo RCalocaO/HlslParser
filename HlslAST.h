@@ -49,9 +49,11 @@ struct FOperator : public FBase
 	enum EType
 	{
 		Error = -1,
-		Plus,
+		Add,
 		Subtract,
 		Mul,
+		Divide,
+		Remainder,
 		UnaryMinus,
 		UnaryPlus,
 
@@ -76,9 +78,11 @@ struct FOperator : public FBase
 	{
 		switch (Type)
 		{
-		case Plus:
+		case Add:
 		case Subtract:
 		case Mul:
+		case Divide:
+		case Remainder:
 			return true;
 		default:
 			break;
@@ -95,7 +99,7 @@ struct FOperator : public FBase
 		printf(" (");
 		switch (Type)
 		{
-		case Plus:
+		case Add:
 			LHS->Write();
 			printf(" + ");
 			RHS->Write();
@@ -108,6 +112,16 @@ struct FOperator : public FBase
 		case Mul:
 			LHS->Write();
 			printf(" * ");
+			RHS->Write();
+			break;
+		case Divide:
+			LHS->Write();
+			printf(" / ");
+			RHS->Write();
+			break;
+		case Remainder:
+			LHS->Write();
+			printf(" %% ");
 			RHS->Write();
 			break;
 		case UnaryPlus:
