@@ -553,7 +553,7 @@ struct FParseRulesClassicRecursiveDescent : public FBaseParseRules
 		else if (Tokenizer.PeekToken() == EToken::LeftParenthesis)
 		{
 			Tokenizer.Advance();
-			if (!E())
+			if (!C())
 			{
 				Error();
 				return false;
@@ -585,10 +585,47 @@ struct FParseRulesClassicRecursiveDescent : public FBaseParseRules
 		return true;
 	}
 
+	bool C()
+	{
+		if (!E())
+		{
+			return false;
+		}
+
+		if (Tokenizer.Match(EToken::Question))
+		{
+			if (!E())
+			{
+				return false;
+			}
+			if (!Tokenizer.Match(EToken::Colon))
+			{
+				Error();
+				return false;
+			}
+			if (!E())
+			{
+				return false;
+			}
+
+			FOperator* Operator = new FOperator;
+			Operator->Type = FOperator::Ternary;
+			assert(Values.size() >= 3);
+			Operator->RHS = Values.back();
+			Values.pop_back();
+			Operator->LHS = Values.back();
+			Values.pop_back();
+			Operator->TernaryCondition = Values.back();
+			Values.pop_back();
+			Values.push_back(Operator);
+		}
+
+		return true;
+	}
 
 	virtual bool ParseExpression() override
 	{
-		return E();
+		return C();
 	}
 };
 
