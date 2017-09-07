@@ -360,6 +360,43 @@ struct FParseRulesShuntingYard2 : public FBaseParseRules
 					return false;
 				}
 			}
+			else if (Tokenizer.Match(EToken::Question))
+			{
+				PushOperator(FOperator::Sentinel);
+				if (!E())
+				{
+					return false;
+				}
+
+				assert(!Operators.empty());
+				assert(Operators.top() == FOperator::Sentinel);
+
+				if (!Tokenizer.Match(EToken::Colon))
+				{
+					Error();
+					return false;
+				}
+
+				if (!E())
+				{
+					return false;
+				}
+
+				assert(!Operators.empty());
+				assert(Operators.top() == FOperator::Sentinel);
+				Operators.pop();
+
+				FOperator* Operator = new FOperator;
+				Operator->Type = FOperator::Ternary;
+				assert(Operands.size() >= 3);
+				Operator->RHS = Operands.top();
+				Operands.pop();
+				Operator->LHS = Operands.top();
+				Operands.pop();
+				Operator->TernaryCondition = Operands.top();
+				Operands.pop();
+				Operands.push(Operator);
+			}
 			else
 			{
 				break;
@@ -393,7 +430,10 @@ struct FParseRulesShuntingYard2 : public FBaseParseRules
 		{
 			Tokenizer.Advance();
 			PushOperator(FOperator::Sentinel);
-			E();
+			if (!E())
+			{
+				return false;
+			}
 			if (Tokenizer.Match(EToken::RightParenthesis))
 			{
 				assert(!Operators.empty());
@@ -702,6 +742,8 @@ struct FParseRulesPratt : public FBaseParseRules
 template <typename TParser>
 void DoParse(std::vector<FToken>& Tokens, const char* ParserName)
 {
+	printf("%s\n", ParserName);
+
 	FTokenizer Tokenizer(Tokens);
 	TParser ParseRules(Tokenizer);
 	while (Tokenizer.HasMoreTokens())
@@ -717,7 +759,6 @@ void DoParse(std::vector<FToken>& Tokens, const char* ParserName)
 			break;
 		}
 	}
-	printf("%s\n", ParserName);
 	for (auto* Value : ParseRules.Values)
 	{
 		Value->Write();
