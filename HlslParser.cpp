@@ -108,6 +108,7 @@ struct FParseRulesRecursiveDescent : public FBaseParseRules
 			return Tokenizer.Match(EToken::RightParenthesis);
 		}
 
+		Error();
 		return false;
 	}
 
@@ -193,9 +194,51 @@ struct FParseRulesRecursiveDescent : public FBaseParseRules
 		return true;
 	}
 
-	virtual bool ParseExpression() override
+	bool ParseConditionalExpression()
 	{
 		if (!ParseExpressionAdditive())
+		{
+			return Error();
+		}
+
+		if (Tokenizer.Match(EToken::Question))
+		{
+			if (!ParseExpression())
+			{
+				Error();
+				return false;
+			}
+
+			if (!Tokenizer.Match(EToken::Colon))
+			{
+				Error();
+				return false;
+			}
+
+			if (!ParseConditionalExpression())
+			{
+				Error();
+				return false;
+			}
+
+			assert(Values.size() >= 3);
+			FOperator* Operator = new FOperator;
+			Operator->Type = FOperator::Ternary;
+			Operator->RHS = Values.back();
+			Values.pop_back();
+			Operator->LHS = Values.back();
+			Values.pop_back();
+			Operator->TernaryCondition = Values.back();
+			Values.pop_back();
+			Values.push_back(Operator);
+		}
+
+		return true;
+	}
+
+	virtual bool ParseExpression() override
+	{
+		if (!ParseConditionalExpression())
 		{
 			return Error();
 		}
@@ -250,6 +293,7 @@ struct FParseRulesShuntingYard2 : public FBaseParseRules
 		PushOperator(FOperator::Sentinel);
 		if (!E())
 		{
+			Error();
 			return false;
 		}
 		while (!Operands.empty())
@@ -300,17 +344,28 @@ struct FParseRulesShuntingYard2 : public FBaseParseRules
 	{
 		if (!P())
 		{
+			Error();
 			return false;
 		}
-		while (IsBinaryOperator(Tokenizer.PeekToken()))
+
+		while (Tokenizer.HasMoreTokens())
 		{
-			PushOperator(TokenToBinaryOperator(Tokenizer.PeekToken(), false));
-			Tokenizer.Advance();
-			if (!P())
+			if (IsBinaryOperator(Tokenizer.PeekToken()))
 			{
-				return false;
+				PushOperator(TokenToBinaryOperator(Tokenizer.PeekToken(), false));
+				Tokenizer.Advance();
+				if (!P())
+				{
+					Error();
+					return false;
+				}
+			}
+			else
+			{
+				break;
 			}
 		}
+
 
 		while (!Operators.empty() && Operators.top() != FOperator::Sentinel)
 		{
@@ -348,6 +403,7 @@ struct FParseRulesShuntingYard2 : public FBaseParseRules
 			else
 			{
 				assert(0);
+				Error();
 				return false;
 			}
 		}
@@ -360,6 +416,7 @@ struct FParseRulesShuntingYard2 : public FBaseParseRules
 		else
 		{
 			assert(0);
+			Error();
 			return false;
 		}
 		return true;
@@ -399,6 +456,7 @@ struct FParseRulesClassicRecursiveDescent : public FBaseParseRules
 	{
 		if (!T())
 		{
+			Error();
 			return false;
 		}
 		while (Tokenizer.PeekToken() == EToken::Plus || Tokenizer.PeekToken() == EToken::Minus)
@@ -407,6 +465,7 @@ struct FParseRulesClassicRecursiveDescent : public FBaseParseRules
 			Tokenizer.Advance();
 			if (!T())
 			{
+				Error();
 				return false;
 			}
 			MakeBinaryOp(Token);
@@ -418,6 +477,7 @@ struct FParseRulesClassicRecursiveDescent : public FBaseParseRules
 	{
 		if (!F())
 		{
+			Error();
 			return false;
 		}
 		while (Tokenizer.PeekToken() == EToken::Multiply || Tokenizer.PeekToken() == EToken::Divide || Tokenizer.PeekToken() == EToken::Mod)
@@ -426,6 +486,7 @@ struct FParseRulesClassicRecursiveDescent : public FBaseParseRules
 			Tokenizer.Advance();
 			if (!F())
 			{
+				Error();
 				return false;
 			}
 			MakeBinaryOp(Token);
@@ -437,6 +498,7 @@ struct FParseRulesClassicRecursiveDescent : public FBaseParseRules
 	{
 		if (!P())
 		{
+			Error();
 			return false;
 		}
 		// ^
@@ -453,11 +515,13 @@ struct FParseRulesClassicRecursiveDescent : public FBaseParseRules
 			Tokenizer.Advance();
 			if (!E())
 			{
+				Error();
 				return false;
 			}
 			if (!Tokenizer.Match(EToken::RightParenthesis))
 			{
 				assert(0);
+				Error();
 				return false;
 			}
 		}
@@ -467,6 +531,7 @@ struct FParseRulesClassicRecursiveDescent : public FBaseParseRules
 			Tokenizer.Advance();
 			if (!F())
 			{
+				Error();
 				return false;
 			}
 			MakeUnaryOp(Token);
@@ -474,6 +539,7 @@ struct FParseRulesClassicRecursiveDescent : public FBaseParseRules
 		else
 		{
 			assert(0);
+			Error();
 			return false;
 		}
 		return true;
@@ -498,6 +564,7 @@ struct FParseRulesPrecedenceClimbing : public FBaseParseRules
 		FBase* t = Exp(0);
 		if (!t)
 		{
+			Error();
 			return false;
 		}
 
@@ -601,6 +668,37 @@ struct FParseRulesPrecedenceClimbing : public FBaseParseRules
 	}
 };
 
+struct FParseRulesPratt : public FBaseParseRules
+{
+	FParseRulesPratt(FTokenizer& InTokenizer)
+		: FBaseParseRules(InTokenizer)
+	{
+	}
+
+	virtual bool ParseExpression() override
+	{
+/*
+		FBase* t = Exp(0);
+		if (!t)
+		{
+			return false;
+		}
+
+		Values.push_back(t);
+*/
+		return true;
+	}
+
+	FOperator* MakeOperator(FOperator::EType Type, FBase* LHS, FBase* RHS = nullptr)
+	{
+		FOperator* Operator = new FOperator;
+		Operator->Type = Type;
+		Operator->LHS = LHS;
+		Operator->RHS = RHS;
+		return Operator;
+	}
+};
+
 template <typename TParser>
 void DoParse(std::vector<FToken>& Tokens, const char* ParserName)
 {
@@ -634,6 +732,7 @@ static void Parse(std::vector<FToken>& Tokens)
 	DoParse<FParseRulesShuntingYard2>(Tokens, "Shunting Yard");
 	DoParse<FParseRulesClassicRecursiveDescent>(Tokens, "Classical Recursive Descent");
 	DoParse<FParseRulesPrecedenceClimbing>(Tokens, "Precedence climbing");
+	//DoParse<FParseRulesPratt>(Tokens, "Pratt");
 }
 
 bool Lex(std::string& Data, std::vector<FToken>& OutTokens)

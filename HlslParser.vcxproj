@@ -142,6 +142,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="HlslIR.h" />
     <ClInclude Include="HlslAST.h" />
     <ClInclude Include="HlslParser.h" />
     <ClInclude Include="stdafx.h" />

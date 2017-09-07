@@ -15,6 +15,8 @@ enum class EToken
 	Minus,
 	LeftParenthesis,
 	RightParenthesis,
+	Question,
+	Colon,
 };
 
 struct FToken
@@ -171,6 +173,8 @@ struct FLexer
 			case '(': ++Data; Token.TokenType = EToken::LeftParenthesis; break;
 			case ')': ++Data; Token.TokenType = EToken::RightParenthesis; break;
 			case ';': ++Data; Token.TokenType = EToken::Semicolon; break;
+			case ':': ++Data; Token.TokenType = EToken::Colon; break;
+			case '?': ++Data; Token.TokenType = EToken::Question; break;
 			default:
 				break;
 			}

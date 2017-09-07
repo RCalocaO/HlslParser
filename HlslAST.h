@@ -32,10 +32,10 @@ struct FConstant : public FBase
 		switch (Type)
 		{
 		case Integer:
-			printf("%u ", UIntValue);
+			printf("%u", UIntValue);
 			break;
 		case HexInteger:
-			printf("0x%x ", UIntValue);
+			printf("0x%x", UIntValue);
 			break;
 		case Float:
 			printf("%f", FloatValue);
@@ -60,6 +60,7 @@ struct FOperator : public FBase
 		Remainder,
 		UnaryMinus,
 		UnaryPlus,
+		Ternary,
 
 		NumTypes,
 		Sentinel = NumTypes,
@@ -94,13 +95,14 @@ struct FOperator : public FBase
 		return false;
 	}
 
-	FBase* LHS;
-	FBase* RHS;
+	FBase* LHS = nullptr;
+	FBase* RHS = nullptr;
+	FBase* TernaryCondition = nullptr;
 
 	virtual FOperator* AsOperator() override { return this; }
 	virtual void Write() override
 	{
-		printf(" (");
+		printf("(");
 		switch (Type)
 		{
 		case Add:
@@ -136,10 +138,19 @@ struct FOperator : public FBase
 			printf(" -");
 			LHS->Write();
 			break;
+		case Ternary:
+			printf("(");
+			TernaryCondition->Write();
+			printf(") ? (");
+			LHS->Write();
+			printf(") : (");
+			RHS->Write();
+			printf(")");
+			break;
 		default:
 			assert(0);
 			break;
 		}
-		printf(") ");
+		printf(")");
 	}
 };
