@@ -53,13 +53,29 @@ struct FOperator : public FBase
 	enum EType
 	{
 		Error = -1,
+		Not,
+		Neg,
+		UnaryMinus,
+		UnaryPlus,
 		Add,
 		Subtract,
 		Mul,
 		Divide,
 		Remainder,
-		UnaryMinus,
-		UnaryPlus,
+		LogicalOr,
+		LogicalAnd,
+		BitOr,
+		Xor,
+		BitAnd,
+		ShitLeft,
+		ShitRight,
+		Equals,
+		NotEquals,
+		Greater,
+		GreaterEqual,
+		Lower,
+		LowerEqual,
+
 		Ternary,
 
 		NumTypes,
@@ -70,6 +86,8 @@ struct FOperator : public FBase
 	{
 		switch (Type)
 		{
+		case Neg:
+		case Not:
 		case UnaryPlus:
 		case UnaryMinus:
 			return true;
@@ -88,6 +106,17 @@ struct FOperator : public FBase
 		case Mul:
 		case Divide:
 		case Remainder:
+		case BitAnd:
+		case LogicalAnd:
+		case BitOr:
+		case LogicalOr:
+		case Xor:
+		case Equals:
+		case NotEquals:
+		case Greater:
+		case GreaterEqual:
+		case Lower:
+		case LowerEqual:
 			return true;
 		default:
 			break;
@@ -105,6 +134,31 @@ struct FOperator : public FBase
 		printf("(");
 		switch (Type)
 		{
+		case LogicalOr:
+			LHS->Write();
+			printf(" || ");
+			RHS->Write();
+			break;
+		case BitOr:
+			LHS->Write();
+			printf(" | ");
+			RHS->Write();
+			break;
+		case LogicalAnd:
+			LHS->Write();
+			printf(" && ");
+			RHS->Write();
+			break;
+		case BitAnd:
+			LHS->Write();
+			printf(" & ");
+			RHS->Write();
+			break;
+		case Xor:
+			LHS->Write();
+			printf(" ^ ");
+			RHS->Write();
+			break;
 		case Add:
 			LHS->Write();
 			printf(" + ");
@@ -113,6 +167,36 @@ struct FOperator : public FBase
 		case Subtract:
 			LHS->Write();
 			printf(" - ");
+			RHS->Write();
+			break;
+		case Greater:
+			LHS->Write();
+			printf(" > ");
+			RHS->Write();
+			break;
+		case GreaterEqual:
+			LHS->Write();
+			printf(" >= ");
+			RHS->Write();
+			break;
+		case Lower:
+			LHS->Write();
+			printf(" < ");
+			RHS->Write();
+			break;
+		case LowerEqual:
+			LHS->Write();
+			printf(" <= ");
+			RHS->Write();
+			break;
+		case Equals:
+			LHS->Write();
+			printf(" == ");
+			RHS->Write();
+			break;
+		case NotEquals:
+			LHS->Write();
+			printf(" != ");
 			RHS->Write();
 			break;
 		case Mul:
@@ -129,6 +213,14 @@ struct FOperator : public FBase
 			LHS->Write();
 			printf(" %% ");
 			RHS->Write();
+			break;
+		case Neg:
+			printf(" ~");
+			LHS->Write();
+			break;
+		case Not:
+			printf(" !");
+			LHS->Write();
 			break;
 		case UnaryPlus:
 			printf(" +");

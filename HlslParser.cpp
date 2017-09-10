@@ -28,6 +28,49 @@ static std::string Load(const char* Filename)
 	return String;
 }
 
+int GetPrecedence(FOperator::EType Operator)
+{
+	switch (Operator)
+	{
+	case FOperator::LogicalAnd:
+	case FOperator::LogicalOr:
+		return 25;
+	case FOperator::BitAnd:
+	case FOperator::BitOr:
+	case FOperator::Xor:
+		return 30;
+	case FOperator::Equals:
+	case FOperator::NotEquals:
+		return 35;
+	case FOperator::Greater:
+	case FOperator::GreaterEqual:
+	case FOperator::Lower:
+	case FOperator::LowerEqual:
+		return 40;
+	case FOperator::ShitLeft:
+	case FOperator::ShitRight:
+		return 50;
+	case FOperator::Add:
+	case FOperator::Subtract:
+		return 60;
+	case FOperator::Mul:
+	case FOperator::Divide:
+	case FOperator::Remainder:
+		return 70;
+	case FOperator::UnaryPlus:
+	case FOperator::UnaryMinus:
+	case FOperator::Neg:
+	case FOperator::Not:
+		return 100;
+	default:
+		assert(0);
+		break;
+	}
+
+	return 0;
+}
+
+
 struct FBaseParseRules
 {
 	std::list<FBase*> Values;
@@ -92,6 +135,28 @@ struct FParseRulesRecursiveDescent : public FBaseParseRules
 	{
 	}
 
+	void MakeOperator(FOperator::EType Type, uint32_t NumOperands)
+	{
+		assert(NumOperands >= 1 && NumOperands <= 3);
+		auto* Node = new FOperator;
+		Node->Type = Type;
+		assert(Values.size() >= NumOperands);
+		if (NumOperands == 3)
+		{
+			Node->TernaryCondition = Values.back();
+			Values.pop_back();
+		}
+		if (NumOperands >= 2)
+		{
+			Node->RHS = Values.back();
+			Values.pop_back();
+		}
+		Node->LHS = Values.back();
+		Values.pop_back();
+		Values.push_back(Node);
+
+	}
+
 	bool ParseExpressionPrimary()
 	{
 		if (ParseTerminal())
@@ -115,7 +180,7 @@ struct FParseRulesRecursiveDescent : public FBaseParseRules
 	bool ParseExpressionUnary()
 	{
 		FOperator::EType UnaryOp = FOperator::Sentinel;
-		if (Tokenizer.PeekToken() == EToken::Minus || Tokenizer.PeekToken() == EToken::Plus)
+		if (Tokenizer.PeekToken() == EToken::Minus || Tokenizer.PeekToken() == EToken::Plus || Tokenizer.PeekToken() == EToken::Exclamation || Tokenizer.PeekToken() == EToken::Tilde)
 		{
 			UnaryOp = TokenToUnaryOperator(Tokenizer.PeekToken(), false);
 			Tokenizer.Advance();
@@ -128,12 +193,15 @@ struct FParseRulesRecursiveDescent : public FBaseParseRules
 
 		if (UnaryOp != FOperator::Sentinel)
 		{
+			MakeOperator(UnaryOp, 1);
+/*
 			auto* Node = new FOperator;
 			Node->Type = UnaryOp;
 			assert(!Values.empty());
 			Node->LHS = Values.back();
 			Values.pop_back();
 			Values.push_back(Node);
+*/
 		}
 		return true;
 	}
@@ -148,19 +216,21 @@ struct FParseRulesRecursiveDescent : public FBaseParseRules
 		while (Tokenizer.PeekToken() == EToken::Multiply || Tokenizer.PeekToken() == EToken::Divide || Tokenizer.PeekToken() == EToken::Mod)
 		{
 			Tokenizer.Advance();
-			auto* Node = new FOperator;
-			Node->Type = TokenToBinaryOperator(Tokenizer.PreviousTokenType(), true);
+			FOperator::EType Type = TokenToBinaryOperator(Tokenizer.PreviousTokenType(), true);
 			if (!ParseExpressionUnary())
 			{
 				return Error();
 			}
 
+			MakeOperator(Type, 2);
+/*
 			assert(Values.size() >= 2);
 			Node->RHS = Values.back();
 			Values.pop_back();
 			Node->LHS = Values.back();
 			Values.pop_back();
 			Values.push_back(Node);
+*/
 		}
 
 		return true;
@@ -176,19 +246,198 @@ struct FParseRulesRecursiveDescent : public FBaseParseRules
 		while (Tokenizer.PeekToken() == EToken::Plus || Tokenizer.PeekToken() == EToken::Minus)
 		{
 			Tokenizer.Advance();
-			auto* Node = new FOperator;
-			Node->Type = TokenToBinaryOperator(Tokenizer.PreviousTokenType(), true);
+			FOperator::EType Type = TokenToBinaryOperator(Tokenizer.PreviousTokenType(), true);
 			if (!ParseExpressionMultiplicative())
 			{
 				return Error();
 			}
 
+			MakeOperator(Type, 2);
+/*
 			assert(Values.size() >= 2);
 			Node->RHS = Values.back();
 			Values.pop_back();
 			Node->LHS = Values.back();
 			Values.pop_back();
 			Values.push_back(Node);
+*/
+		}
+
+		return true;
+	}
+
+	bool ParseShiftExpression()
+	{
+		if (!ParseExpressionAdditive())
+		{
+			return Error();
+		}
+
+		while (Tokenizer.PeekToken() == EToken::GreaterGreater || Tokenizer.PeekToken() == EToken::LowerLower)
+		{
+			Tokenizer.Advance();
+			FOperator::EType Type = TokenToBinaryOperator(Tokenizer.PreviousTokenType(), true);
+			if (!ParseExpressionAdditive())
+			{
+				return Error();
+			}
+
+			MakeOperator(Type, 2);
+		}
+
+		return true;
+	}
+
+	bool ParseRelationalExpression()
+	{
+		if (!ParseShiftExpression())
+		{
+			return Error();
+		}
+
+		auto IsRelational = [](EToken Token)
+		{
+			switch (Token)
+			{
+			case EToken::Greater:
+			case EToken::GreaterGreater:
+			case EToken::Lower:
+			case EToken::LowerEqual:
+			case EToken::EqualEqual:
+			case EToken::ExclamationEqual:
+				return true;
+			default:
+				break;
+			}
+			return false;
+		};
+
+		if (IsRelational(Tokenizer.PeekToken()))
+		{
+			Tokenizer.Advance();
+			FOperator::EType Type = TokenToBinaryOperator(Tokenizer.PreviousTokenType(), true);
+			if (!ParseShiftExpression())
+			{
+				return Error();
+			}
+
+			MakeOperator(Type, 2);
+		}
+
+		return true;
+	}
+
+
+	bool ParseBitAndExpression()
+	{
+		if (!ParseRelationalExpression())
+		{
+			return false;
+		}
+
+		if (Tokenizer.Match(EToken::Ampersand))
+		{
+			if (!ParseRelationalExpression())
+			{
+				Error();
+				return false;
+			}
+
+			MakeOperator(FOperator::BitAnd, 2);
+		}
+
+		return true;
+	}
+
+	bool ParseXorExpression()
+	{
+		if (!ParseBitAndExpression())
+		{
+			return false;
+		}
+
+		if (Tokenizer.Match(EToken::Caret))
+		{
+			if (!ParseBitAndExpression())
+			{
+				Error();
+				return false;
+			}
+
+			MakeOperator(FOperator::Xor, 2);
+		}
+
+		return true;
+	}
+
+	bool ParseBitOrExpression()
+	{
+		if (!ParseXorExpression())
+		{
+			return false;
+		}
+
+		if (Tokenizer.Match(EToken::Pipe))
+		{
+			if (!ParseXorExpression())
+			{
+				Error();
+				return false;
+			}
+
+			MakeOperator(FOperator::BitOr, 2);
+		}
+
+		return true;
+	}
+
+	bool ParseLogicalAndExpression()
+	{
+		if (!ParseBitOrExpression())
+		{
+			return false;
+		}
+
+		while (Tokenizer.Match(EToken::AmpersandAmpersand))
+		{
+			if (!ParseBitOrExpression())
+			{
+				Error();
+				return false;
+			}
+
+			MakeOperator(FOperator::LogicalAnd, 2);
+		}
+
+		return true;
+	}
+
+	bool ParseLogicalOrExpression()
+	{
+		if (!ParseLogicalAndExpression())
+		{
+			return false;
+		}
+
+		while (Tokenizer.Match(EToken::PipePipe))
+		{
+			if (!ParseLogicalAndExpression())
+			{
+				Error();
+				return false;
+			}
+
+			MakeOperator(FOperator::LogicalOr, 2);
+/*
+			assert(Values.size() >= 2);
+			FOperator* Operator = new FOperator;
+			Operator->Type = FOperator::LogicalOr;
+			Operator->RHS = Values.back();
+			Values.pop_back();
+			Operator->LHS = Values.back();
+			Values.pop_back();
+			Values.push_back(Operator);
+*/
 		}
 
 		return true;
@@ -196,7 +445,7 @@ struct FParseRulesRecursiveDescent : public FBaseParseRules
 
 	bool ParseConditionalExpression()
 	{
-		if (!ParseExpressionAdditive())
+		if (!ParseLogicalOrExpression())
 		{
 			return Error();
 		}
@@ -221,6 +470,8 @@ struct FParseRulesRecursiveDescent : public FBaseParseRules
 				return false;
 			}
 
+			MakeOperator(FOperator::Ternary, 3);
+/*
 			assert(Values.size() >= 3);
 			FOperator* Operator = new FOperator;
 			Operator->Type = FOperator::Ternary;
@@ -231,6 +482,7 @@ struct FParseRulesRecursiveDescent : public FBaseParseRules
 			Operator->TernaryCondition = Values.back();
 			Values.pop_back();
 			Values.push_back(Operator);
+*/
 		}
 
 		return true;
@@ -303,28 +555,6 @@ struct FParseRulesShuntingYard2 : public FBaseParseRules
 		}
 
 		return true;
-	}
-
-	int GetPrecedence(FOperator::EType Operator)
-	{
-		switch (Operator)
-		{
-		case FOperator::Add:
-		case FOperator::Subtract:
-			return 60;
-		case FOperator::Mul:
-		case FOperator::Divide:
-		case FOperator::Remainder:
-			return 70;
-		case FOperator::UnaryPlus:
-		case FOperator::UnaryMinus:
-			return 100;
-		default:
-			assert(0);
-			break;
-		}
-
-		return 0;
 	}
 
 	void PushOperator(FOperator::EType Operator)
@@ -649,26 +879,6 @@ struct FParseRulesPrecedenceClimbing : public FBaseParseRules
 		return true;
 	}
 
-	int Prec(FOperator::EType Operator)
-	{
-		switch (Operator)
-		{
-		case FOperator::Add:
-		case FOperator::Subtract:
-			return 60;
-		case FOperator::Mul:
-			return 70;
-		case FOperator::UnaryPlus:
-		case FOperator::UnaryMinus:
-			return 100;
-		default:
-			assert(0);
-			break;
-		}
-
-		return 0;
-	}
-
 	FBase* Exp(int p)
 	{
 		FBase* t = P();
@@ -677,17 +887,41 @@ struct FParseRulesPrecedenceClimbing : public FBaseParseRules
 			return nullptr;
 		}
 
-		while (IsBinaryOperator(Tokenizer.PeekToken()) && Prec(TokenToBinaryOperator(Tokenizer.PeekToken(), false)) >= p)
+		while (IsBinaryOperator(Tokenizer.PeekToken()) && GetPrecedence(TokenToBinaryOperator(Tokenizer.PeekToken(), false)) >= p)
 		{
 			FOperator::EType Op = TokenToBinaryOperator(Tokenizer.PeekToken(), true);
 			Tokenizer.Advance();
-			int q = (AssociativityIsRight(Op) ? 0 : 1) + Prec(Op);
+			int q = (AssociativityIsRight(Op) ? 0 : 1) + GetPrecedence(Op);
 			FBase* t1 = Exp(q);
 			if (!t1)
 			{
 				return nullptr;
 			}
 			t = MakeOperator(Op, t, t1);
+		}
+
+		if (Tokenizer.Match(EToken::Question))
+		{
+			FBase* Condition = t;
+			FBase* LHS = Exp(0);
+			if (!LHS)
+			{
+				return nullptr;
+			}
+
+			if (!Tokenizer.Match(EToken::Colon))
+			{
+				return nullptr;
+			}
+
+			FBase* RHS = Exp(0);
+			if (!RHS)
+			{
+				return nullptr;
+			}
+
+			t = MakeOperator(FOperator::Ternary, LHS, RHS);
+			(t->AsOperator())->TernaryCondition = Condition;
 		}
 
 		return t;
@@ -722,7 +956,7 @@ struct FParseRulesPrecedenceClimbing : public FBaseParseRules
 		{
 			FOperator::EType Op = TokenToUnaryOperator(Tokenizer.PeekToken(), true);
 			Tokenizer.Advance();
-			int q = Prec(Op);
+			int q = GetPrecedence(Op);
 			FBase* t = Exp(q);
 			return MakeOperator(Op, t);
 		}

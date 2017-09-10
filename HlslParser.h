@@ -9,14 +9,31 @@ enum class EToken
 	HexInteger,
 	Float,
 	Plus,
+	PlusPlus,
 	Multiply,
 	Divide,
 	Mod,
 	Minus,
+	MinusMinus,
 	LeftParenthesis,
 	RightParenthesis,
 	Question,
 	Colon,
+	Exclamation,
+	Ampersand,
+	AmpersandAmpersand,
+	Pipe,
+	PipePipe,
+	Greater,
+	GreaterGreater,
+	GreaterEqual,
+	Lower,
+	LowerLower,
+	LowerEqual,
+	EqualEqual,
+	ExclamationEqual,
+	Caret,
+	Tilde,
 };
 
 struct FToken
@@ -37,11 +54,41 @@ struct FLexer
 	const char* End;
 	std::string Source;
 
+	std::map<char, std::map<char, EToken> > SimpleTokens;
+
 	FLexer(std::string InSource)
 		: Source(InSource)
 	{
 		Data = Source.c_str();
 		End = Data + Source.length();
+
+		SimpleTokens['+'][0] = EToken::Plus;
+		SimpleTokens['+']['+'] = EToken::PlusPlus;
+		SimpleTokens['-'][0] = EToken::Minus;
+		SimpleTokens['-']['-'] = EToken::MinusMinus;
+		SimpleTokens['*'][0] = EToken::Multiply;
+		SimpleTokens['/'][0] = EToken::Divide;
+		SimpleTokens['%'][0] = EToken::Mod;
+		SimpleTokens['('][0] = EToken::LeftParenthesis;
+		SimpleTokens[')'][0] = EToken::RightParenthesis;
+		SimpleTokens[';'][0] = EToken::Semicolon;
+		SimpleTokens[':'][0] = EToken::Colon;
+		SimpleTokens['?'][0] = EToken::Question;
+		SimpleTokens['!'][0] = EToken::Exclamation;
+		SimpleTokens['&'][0] = EToken::Ampersand;
+		SimpleTokens['&']['&'] = EToken::AmpersandAmpersand;
+		SimpleTokens['|'][0] = EToken::Pipe;
+		SimpleTokens['|']['|'] = EToken::PipePipe;
+		SimpleTokens['>'][0] = EToken::Greater;
+		SimpleTokens['>']['>'] = EToken::GreaterGreater;
+		SimpleTokens['>']['='] = EToken::GreaterEqual;
+		SimpleTokens['<'][0] = EToken::Lower;
+		SimpleTokens['<']['<'] = EToken::LowerLower;
+		SimpleTokens['<']['='] = EToken::LowerEqual;
+		SimpleTokens['^'][0] = EToken::Caret;
+		SimpleTokens['~'][0] = EToken::Tilde;
+		SimpleTokens['=']['='] = EToken::EqualEqual;
+		SimpleTokens['!']['='] = EToken::ExclamationEqual;
 	}
 
 	void SkipWhiteSpace()
@@ -163,20 +210,22 @@ struct FLexer
 		}
 		else
 		{
-			switch (c)
+			auto Found = SimpleTokens.find(c);
+			if (Found != SimpleTokens.end())
 			{
-			case '+': ++Data; Token.TokenType = EToken::Plus; break;
-			case '-': ++Data; Token.TokenType = EToken::Minus; break;
-			case '*': ++Data; Token.TokenType = EToken::Multiply; break;
-			case '/': ++Data; Token.TokenType = EToken::Divide; break;
-			case '%': ++Data; Token.TokenType = EToken::Mod; break;
-			case '(': ++Data; Token.TokenType = EToken::LeftParenthesis; break;
-			case ')': ++Data; Token.TokenType = EToken::RightParenthesis; break;
-			case ';': ++Data; Token.TokenType = EToken::Semicolon; break;
-			case ':': ++Data; Token.TokenType = EToken::Colon; break;
-			case '?': ++Data; Token.TokenType = EToken::Question; break;
-			default:
-				break;
+				++Data;
+				auto DoubleFound = Found->second.find(*Data);
+				if (DoubleFound != Found->second.end())
+				{
+					++Data;
+				}
+				else
+				{
+					DoubleFound = Found->second.find(0);
+				}
+
+				assert(DoubleFound != Found->second.end());
+				Token.TokenType = DoubleFound->second;
 			}
 		}
 
@@ -266,6 +315,32 @@ inline FOperator::EType TokenToBinaryOperator(EToken Token, bool bAssertIfNotOpe
 		return FOperator::Divide;
 	case EToken::Mod:
 		return FOperator::Remainder;
+	case EToken::Caret:
+		return FOperator::Xor;
+	case EToken::Greater:
+		return FOperator::Greater;
+	case EToken::GreaterGreater:
+		return FOperator::ShitRight;
+	case EToken::GreaterEqual:
+		return FOperator::GreaterEqual;
+	case EToken::Lower:
+		return FOperator::Lower;
+	case EToken::LowerLower:
+		return FOperator::ShitLeft;
+	case EToken::LowerEqual:
+		return FOperator::LowerEqual;
+	case EToken::EqualEqual:
+		return FOperator::Equals;
+	case EToken::ExclamationEqual:
+		return FOperator::NotEquals;
+	case EToken::Ampersand:
+		return FOperator::BitAnd;
+	case EToken::AmpersandAmpersand:
+		return FOperator::LogicalAnd;
+	case EToken::Pipe:
+		return FOperator::BitOr;
+	case EToken::PipePipe:
+		return FOperator::LogicalOr;
 	default:
 		if (bAssertIfNotOperator)
 		{
@@ -289,6 +364,10 @@ inline FOperator::EType TokenToUnaryOperator(EToken Token, bool bAssertIfNotOper
 		return FOperator::UnaryMinus;
 	case EToken::Plus:
 		return FOperator::UnaryPlus;
+	case EToken::Exclamation:
+		return FOperator::Not;
+	case EToken::Tilde:
+		return FOperator::Neg;
 	default:
 		if (bAssertIfNotOperator)
 		{
