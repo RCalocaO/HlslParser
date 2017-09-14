@@ -293,6 +293,12 @@ struct FTokenizer
 		return Tokens[Current - 1].Literal;
 	}
 
+	const std::string& TokenString() const
+	{
+		assert(Current >= 0);
+		return Tokens[Current].Literal;
+	}
+
 	EToken PreviousTokenType() const
 	{
 		assert(Current > 0);
@@ -381,4 +387,9 @@ inline FOperator::EType TokenToUnaryOperator(EToken Token, bool bAssertIfNotOper
 inline bool IsUnaryOperator(EToken Token)
 {
 	return TokenToUnaryOperator(Token, false) != FOperator::Error;
+}
+
+inline bool IsAnyOperator(EToken Token)
+{
+	return IsBinaryOperator(Token) || IsUnaryOperator(Token) || Token == EToken::Question;
 }

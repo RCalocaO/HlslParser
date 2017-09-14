@@ -32,13 +32,18 @@ int GetPrecedence(FOperator::EType Operator)
 {
 	switch (Operator)
 	{
-	case FOperator::LogicalAnd:
+	case FOperator::Ternary:
+		return 20;
 	case FOperator::LogicalOr:
 		return 25;
-	case FOperator::BitAnd:
-	case FOperator::BitOr:
+	case FOperator::LogicalAnd:
+		return 27;
 	case FOperator::Xor:
-		return 30;
+		return 32;
+	case FOperator::BitOr:
+		return 33;
+	case FOperator::BitAnd:
+		return 34;
 	case FOperator::Equals:
 	case FOperator::NotEquals:
 		return 35;
@@ -90,30 +95,42 @@ struct FBaseParseRules
 
 	virtual bool ParseExpression() = 0;
 
-	bool ParseTerminal()
+	bool ParseTerminal(EToken Token, const std::string& String)
 	{
-		if (Tokenizer.Match(EToken::Integer))
+		if (Token == EToken::Integer)
 		{
 			auto* Node = new FConstant;
 			Node->Type = FConstant::Integer;
-			Node->UIntValue = atoi(Tokenizer.PreviousTokenString().c_str());
+			Node->UIntValue = atoi(String.c_str());
 			PushTerminal(Node);
 			return true;
 		}
-		else if (Tokenizer.Match(EToken::HexInteger))
+		else if (Token == EToken::HexInteger)
 		{
 			auto* Node = new FConstant;
 			Node->Type = FConstant::HexInteger;
-			Node->UIntValue = (uint32_t)atoll(Tokenizer.PreviousTokenString().c_str());
+			Node->UIntValue = (uint32_t)atoll(String.c_str());
 			PushTerminal(Node);
 			return true;
 		}
-		else if (Tokenizer.Match(EToken::Float))
+		else if (Token == EToken::Float)
 		{
 			auto* Node = new FConstant;
 			Node->Type = FConstant::Float;
-			Node->FloatValue = (float)atof(Tokenizer.PreviousTokenString().c_str());
+			Node->FloatValue = (float)atof(String.c_str());
 			PushTerminal(Node);
+			return true;
+		}
+
+		return false;
+	}
+
+	bool ParseTerminal()
+	{
+		EToken Token = Tokenizer.PeekToken();
+		if (ParseTerminal(Token, Tokenizer.TokenString()))
+		{
+			Tokenizer.Advance();
 			return true;
 		}
 
@@ -822,25 +839,84 @@ struct FParseRulesPratt : public FBaseParseRules
 
 	virtual bool ParseExpression() override
 	{
-/*
-		FBase* t = Exp(0);
+		FBase* t = E(0);
 		if (!t)
 		{
 			return false;
 		}
 
 		Values.push_back(t);
-*/
 		return true;
 	}
 
-	FOperator* MakeOperator(FOperator::EType Type, FBase* LHS, FBase* RHS = nullptr)
+	FOperator* MakeOperator(FOperator::EType Type, FBase* LHS, FBase* RHS = nullptr, FBase* Ternary = nullptr)
 	{
 		FOperator* Operator = new FOperator;
 		Operator->Type = Type;
+		Operator->TernaryCondition = Ternary;
 		Operator->LHS = LHS;
 		Operator->RHS = RHS;
 		return Operator;
+	}
+
+	struct FLeftCommand
+	{
+/*
+		virtual FBase* LeftDenotation(FBase* LeftOperand, FOperator::EType Operator) = 0;
+		virtual int LeftBindingPower() = 0;
+		virtual int NextBindingPower()
+		{
+			return LeftBindingPower();
+		}
+*/
+	};
+
+	FBase* Nud(EToken Token)
+	{
+		if (ParseTerminal(Token, Tokenizer.PreviousTokenString()))
+		{
+			assert(Values.size() >= 1);
+			FBase* Terminal = Values.back();
+			Values.pop_back();
+			return Terminal;
+		}
+		else if (IsUnaryOperator(Token))
+		{
+			FOperator::EType Operator = TokenToUnaryOperator(Token, true);
+			FBase* LHS = E(GetPrecedence(Operator));
+			return MakeOperator(Operator, LHS);
+		}
+		return nullptr;
+	}
+
+	int Lbp(EToken Token)
+	{
+		return GetPrecedence(TokenToBinaryOperator(Token, true));
+	}
+
+	FBase* Led(EToken Token, FBase* Left)
+	{
+		FBase* Right = E(Lbp(Token));
+		return MakeOperator(TokenToBinaryOperator(Token, false), Left, Right);
+	}
+
+	FBase* E(int rbp)
+	{
+		FBase* Left;
+		if (Tokenizer.HasMoreTokens())
+		{
+			EToken Token = Tokenizer.PeekToken();
+			Tokenizer.Advance();
+			Left = Nud(Token);
+			Token = Tokenizer.PeekToken();
+			while (IsAnyOperator(Token) && rbp < Lbp(Token))
+			{
+				Tokenizer.Advance();
+				Left = Led(Token, Left);
+				Token = Tokenizer.PeekToken();
+			}
+		}
+		return Left;
 	}
 };
 
@@ -877,7 +953,7 @@ static void Parse(std::vector<FToken>& Tokens)
 	DoParse<FParseRulesRecursiveDescent>(Tokens, "Recursive Descent");
 	DoParse<FParseRulesShuntingYard2>(Tokens, "Shunting Yard");
 	DoParse<FParseRulesPrecedenceClimbing>(Tokens, "Precedence climbing");
-	//DoParse<FParseRulesPratt>(Tokens, "Pratt");
+	DoParse<FParseRulesPratt>(Tokens, "Pratt");
 }
 
 bool Lex(std::string& Data, std::vector<FToken>& OutTokens)
