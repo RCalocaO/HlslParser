@@ -39,34 +39,34 @@ int GetPrecedence(FOperator::EType Operator)
 	case FOperator::LogicalAnd:
 		return 27;
 	case FOperator::Xor:
-		return 32;
+		return 30;
 	case FOperator::BitOr:
 		return 33;
 	case FOperator::BitAnd:
 		return 34;
 	case FOperator::Equals:
 	case FOperator::NotEquals:
-		return 35;
+		return 40;
 	case FOperator::Greater:
 	case FOperator::GreaterEqual:
 	case FOperator::Lower:
 	case FOperator::LowerEqual:
-		return 40;
+		return 42;
 	case FOperator::ShitLeft:
 	case FOperator::ShitRight:
-		return 50;
+		return 45;
 	case FOperator::Add:
 	case FOperator::Subtract:
-		return 60;
+		return 50;
 	case FOperator::Mul:
 	case FOperator::Divide:
 	case FOperator::Remainder:
-		return 70;
+		return 60;
 	case FOperator::UnaryPlus:
 	case FOperator::UnaryMinus:
 	case FOperator::Neg:
 	case FOperator::Not:
-		return 100;
+		return 70;
 	default:
 		assert(0);
 		break;
@@ -158,11 +158,6 @@ struct FParseRulesRecursiveDescent : public FBaseParseRules
 		auto* Node = new FOperator;
 		Node->Type = Type;
 		assert(Values.size() >= NumOperands);
-		if (NumOperands == 3)
-		{
-			Node->TernaryCondition = Values.back();
-			Values.pop_back();
-		}
 		if (NumOperands >= 2)
 		{
 			Node->RHS = Values.back();
@@ -170,6 +165,11 @@ struct FParseRulesRecursiveDescent : public FBaseParseRules
 		}
 		Node->LHS = Values.back();
 		Values.pop_back();
+		if (NumOperands == 3)
+		{
+			Node->TernaryCondition = Values.back();
+			Values.pop_back();
+		}
 		Values.push_back(Node);
 
 	}
@@ -211,14 +211,6 @@ struct FParseRulesRecursiveDescent : public FBaseParseRules
 		if (UnaryOp != FOperator::Sentinel)
 		{
 			MakeOperator(UnaryOp, 1);
-/*
-			auto* Node = new FOperator;
-			Node->Type = UnaryOp;
-			assert(!Values.empty());
-			Node->LHS = Values.back();
-			Values.pop_back();
-			Values.push_back(Node);
-*/
 		}
 		return true;
 	}
@@ -240,14 +232,6 @@ struct FParseRulesRecursiveDescent : public FBaseParseRules
 			}
 
 			MakeOperator(Type, 2);
-/*
-			assert(Values.size() >= 2);
-			Node->RHS = Values.back();
-			Values.pop_back();
-			Node->LHS = Values.back();
-			Values.pop_back();
-			Values.push_back(Node);
-*/
 		}
 
 		return true;
@@ -270,14 +254,6 @@ struct FParseRulesRecursiveDescent : public FBaseParseRules
 			}
 
 			MakeOperator(Type, 2);
-/*
-			assert(Values.size() >= 2);
-			Node->RHS = Values.back();
-			Values.pop_back();
-			Node->LHS = Values.back();
-			Values.pop_back();
-			Values.push_back(Node);
-*/
 		}
 
 		return true;
@@ -445,16 +421,6 @@ struct FParseRulesRecursiveDescent : public FBaseParseRules
 			}
 
 			MakeOperator(FOperator::LogicalOr, 2);
-/*
-			assert(Values.size() >= 2);
-			FOperator* Operator = new FOperator;
-			Operator->Type = FOperator::LogicalOr;
-			Operator->RHS = Values.back();
-			Values.pop_back();
-			Operator->LHS = Values.back();
-			Values.pop_back();
-			Values.push_back(Operator);
-*/
 		}
 
 		return true;
@@ -488,18 +454,6 @@ struct FParseRulesRecursiveDescent : public FBaseParseRules
 			}
 
 			MakeOperator(FOperator::Ternary, 3);
-/*
-			assert(Values.size() >= 3);
-			FOperator* Operator = new FOperator;
-			Operator->Type = FOperator::Ternary;
-			Operator->RHS = Values.back();
-			Values.pop_back();
-			Operator->LHS = Values.back();
-			Values.pop_back();
-			Operator->TernaryCondition = Values.back();
-			Values.pop_back();
-			Values.push_back(Operator);
-*/
 		}
 
 		return true;
@@ -859,18 +813,6 @@ struct FParseRulesPratt : public FBaseParseRules
 		return Operator;
 	}
 
-	struct FLeftCommand
-	{
-/*
-		virtual FBase* LeftDenotation(FBase* LeftOperand, FOperator::EType Operator) = 0;
-		virtual int LeftBindingPower() = 0;
-		virtual int NextBindingPower()
-		{
-			return LeftBindingPower();
-		}
-*/
-	};
-
 	FBase* Nud(EToken Token)
 	{
 		if (ParseTerminal(Token, Tokenizer.PreviousTokenString()))
@@ -886,16 +828,40 @@ struct FParseRulesPratt : public FBaseParseRules
 			FBase* LHS = E(GetPrecedence(Operator));
 			return MakeOperator(Operator, LHS);
 		}
+		else if (Token == EToken::LeftParenthesis)
+		{
+			FBase* Exp = E(0);
+			if (!Tokenizer.Match(EToken::RightParenthesis))
+			{
+				return nullptr;
+			}
+			return Exp;
+		}
 		return nullptr;
 	}
 
 	int Lbp(EToken Token)
 	{
+		if (Token == EToken::Question)
+		{
+			return 20;
+		}
 		return GetPrecedence(TokenToBinaryOperator(Token, true));
 	}
 
 	FBase* Led(EToken Token, FBase* Left)
 	{
+		if (Token == EToken::Question)
+		{
+			FBase* LHS = E(0);
+			if (!Tokenizer.Match(EToken::Colon))
+			{
+				Error();
+				return nullptr;
+			}
+			FBase* RHS = E(0);
+			return MakeOperator(FOperator::Ternary, LHS, RHS, Left);
+		}
 		FBase* Right = E(Lbp(Token));
 		return MakeOperator(TokenToBinaryOperator(Token, false), Left, Right);
 	}
