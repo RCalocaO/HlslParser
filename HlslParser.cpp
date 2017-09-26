@@ -505,6 +505,19 @@ struct FParseRulesShuntingYard2 : public FBaseParseRules
 			Operands.pop();
 			Operands.push(Operator);
 		}
+		else if (Top == FOperator::TernaryEnd)
+		{
+			FOperator* Operator = new FOperator;
+			Operator->Type = FOperator::Ternary;
+			assert(Operands.size() >= 3);
+			Operator->RHS = Operands.top();
+			Operands.pop();
+			Operator->LHS = Operands.top();
+			Operands.pop();
+			Operator->TernaryCondition = Operands.top();
+			Operands.pop();
+			Operands.push(Operator);
+		}
 		else
 		{
 			assert(0);
@@ -563,14 +576,14 @@ struct FParseRulesShuntingYard2 : public FBaseParseRules
 			}
 			else if (Tokenizer.Match(EToken::Question))
 			{
-				PushOperator(FOperator::Sentinel);
+				PushOperator(FOperator::Ternary);
 				if (!E())
 				{
 					return false;
 				}
 
 				assert(!Operators.empty());
-				assert(Operators.top() == FOperator::Sentinel);
+				assert(Operators.top() == FOperator::Ternary);
 
 				if (!Tokenizer.Match(EToken::Colon))
 				{
@@ -584,8 +597,10 @@ struct FParseRulesShuntingYard2 : public FBaseParseRules
 				}
 
 				assert(!Operators.empty());
-				assert(Operators.top() == FOperator::Sentinel);
+				assert(Operators.top() == FOperator::Ternary);
 				Operators.pop();
+				Operators.push(FOperator::TernaryEnd);
+/*
 
 				FOperator* Operator = new FOperator;
 				Operator->Type = FOperator::Ternary;
@@ -597,6 +612,7 @@ struct FParseRulesShuntingYard2 : public FBaseParseRules
 				Operator->TernaryCondition = Operands.top();
 				Operands.pop();
 				Operands.push(Operator);
+*/
 			}
 			else
 			{
@@ -605,7 +621,7 @@ struct FParseRulesShuntingYard2 : public FBaseParseRules
 		}
 
 
-		while (!Operators.empty() && Operators.top() != FOperator::Sentinel)
+		while (!Operators.empty() && Operators.top() != FOperator::Sentinel && Operators.top() != FOperator::Ternary)
 		{
 			PopOperator();
 		}

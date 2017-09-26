@@ -53,6 +53,7 @@ struct FOperator : public FBase
 	enum EType
 	{
 		Error = -1,
+		Sentinel,
 		Not,
 		Neg,
 		UnaryMinus,
@@ -79,7 +80,7 @@ struct FOperator : public FBase
 		Ternary,
 
 		NumTypes,
-		Sentinel = NumTypes,
+		TernaryEnd = NumTypes,	// Not a real operator, only used for parsing
 	} Type;
 
 	static bool IsUnary(EType Type)
