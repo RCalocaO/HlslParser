@@ -4,6 +4,9 @@
 #include "stdafx.h"
 #include "HlslAST.h"
 #include "HlslParser.h"
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <chrono>
 
 std::string Filename = ".\\tests\\expr.hlsl";
 
@@ -902,6 +905,24 @@ struct FParseRulesPratt : public FBaseParseRules
 	}
 };
 
+struct FScopeTimer
+{
+	std::chrono::high_resolution_clock::time_point Begin, End;
+	double Delta;
+	FScopeTimer()
+	{
+		Begin = std::chrono::high_resolution_clock::now();
+	}
+
+	~FScopeTimer()
+	{
+		End = std::chrono::high_resolution_clock::now();
+		std::chrono::duration<double> Diff = End - Begin;
+		Delta = Diff.count();
+		printf("Timer: %f ms\n", (double)Delta * 1000.0f);
+	}
+};
+
 template <typename TParser>
 void DoParse(std::vector<FToken>& Tokens, const char* ParserName)
 {
@@ -909,25 +930,32 @@ void DoParse(std::vector<FToken>& Tokens, const char* ParserName)
 
 	FTokenizer Tokenizer(Tokens);
 	TParser ParseRules(Tokenizer);
-	while (Tokenizer.HasMoreTokens())
 	{
-		if (!ParseRules.ParseExpression())
+		FScopeTimer Timer;
+		while (Tokenizer.HasMoreTokens())
 		{
-			printf("Failed!\n");
-			break;
-		}
-		if (!Tokenizer.Match(EToken::Semicolon))
-		{
-			printf("Failed!\n");
-			break;
+			if (!ParseRules.ParseExpression())
+			{
+				printf("Failed!\n");
+				break;
+			}
+			if (!Tokenizer.Match(EToken::Semicolon))
+			{
+				printf("Failed!\n");
+				break;
+			}
 		}
 	}
-	for (auto* Value : ParseRules.Values)
+	static bool bWrite = false;
+	if (bWrite)
 	{
-		Value->Write();
+		for (auto* Value : ParseRules.Values)
+		{
+			Value->Write();
+			printf("\n");
+		}
 		printf("\n");
 	}
-	printf("\n");
 }
 
 static void Parse(std::vector<FToken>& Tokens)
@@ -957,6 +985,17 @@ bool Lex(std::string& Data, std::vector<FToken>& OutTokens)
 
 int main()
 {
+	LPSTR CmdLine = ::GetCommandLineA();
+	const char* Token = CmdLine;
+	while (Token = strchr(Token, ' '))
+	{
+		++Token;
+		//if (!_strnicmp(Token, "-debugger", 9))
+		//{
+		//}
+		Filename = Token;
+	}
+
 	std::string Data = Load(Filename.c_str());
 
 	std::vector<FToken> Tokens;
@@ -964,6 +1003,8 @@ int main()
 	{
 		return 1;
 	}
+
+	printf("%d Tokens\n", Tokens.size());
 
 	Parse(Tokens);
 
