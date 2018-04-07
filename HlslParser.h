@@ -91,16 +91,72 @@ struct FLexer
 		SimpleTokens['!']['='] = EToken::ExclamationEqual;
 	}
 
+	void SkipComments()
+	{
+		if (Data + 1 < End)
+		{
+			if (*Data == '/' && Data[1] == '/')
+			{
+				Data += 2;
+				while (Data < End && *Data != '\n' && *Data != '\r')
+				{
+					++Data;
+				}
+
+				while (*Data == '\r' || *Data == '\n')
+				{
+					++Data;
+				}
+			}
+		}
+	}
+
 	void SkipWhiteSpace()
 	{
+		while (Data < End)
+		{
+			const char* LastData = Data;
+			while (*Data == ' ' || *Data == '\n' || *Data == '\t' || *Data == '\r')
+			{
+				++Data;
+			}
+
+			if (*Data == '/' && Data + 1 < End)
+			{
+				if (Data[1] == '/')
+				{
+					Data += 2;
+					while (*Data && *Data != '\n' && *Data != '\r')
+					{
+						++Data;
+					}
+				}
+				else if (Data[1] == '*')
+				{
+					Data += 2;
+					while (Data + 2 < End && Data[0] != '*' && Data[1] != '/')
+					{
+						++Data;
+					}
+					Data += 2;
+				}
+			}
+
+			if (LastData == Data)
+			{
+				break;
+			}
+		}
+
 		char c = *Data;
-		FToken Token;
 
 		while (Data < End && (c == ' ' || c == '\n' || c == '\t' || c == '\r'))
 		{
 			++Data;
 			c = *Data;
 		}
+
+		SkipComments();
 	}
 
 	bool HasMoreTokens()

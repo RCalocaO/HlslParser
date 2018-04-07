@@ -946,7 +946,8 @@ void DoParse(std::vector<FToken>& Tokens, const char* ParserName)
 			}
 		}
 	}
-	static bool bWrite = false;
+
+	static bool bWrite = !false;
 	if (bWrite)
 	{
 		for (auto* Value : ParseRules.Values)
@@ -976,7 +977,6 @@ bool Lex(std::string& Data, std::vector<FToken>& OutTokens)
 		if (Token.TokenType == EToken::Error)
 		{
 			return false;
-			break;
 		}
 		OutTokens.push_back(Token);
 	}
@@ -1007,6 +1007,15 @@ int main()
 	printf("%d Tokens\n", Tokens.size());
 
 	Parse(Tokens);
+
+	//Recursive
+	(((3 > 5)) ? ((((1 < 2)) ? ((-1)) : (4))) : (5));
+	//Shunting
+	(((3 > 5)) ? ((((1 < 2)) ? ((-1)) : (4))) : (5));
+	//Precedence
+	(3 > ((5) ? ((1 < ((2) ? ((-1)) : (4)))) : (5)));
+//	Pratt
+	(((3 > 5)) ? ((((1 < 2)) ? ((-1)) : (4))) : (5));
 
 	return 0;
 }
