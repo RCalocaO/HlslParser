@@ -292,7 +292,7 @@ struct FLexer
 struct FTokenizer
 {
 	std::vector<FToken> Tokens;
-	FBase* Expression = nullptr;
+	AST::FBase* Expression = nullptr;
 
 	FTokenizer(const std::vector<FToken>& InTokens)
 		: Tokens(InTokens)
@@ -362,9 +362,9 @@ struct FTokenizer
 	}
 };
 
-
-inline FOperator::EType TokenToBinaryOperator(EToken Token, bool bAssertIfNotOperator)
+inline AST::FOperator::EType TokenToBinaryOperator(EToken Token, bool bAssertIfNotOperator)
 {
+	using namespace AST;
 	switch (Token)
 	{
 	case EToken::Plus:
@@ -415,11 +415,12 @@ inline FOperator::EType TokenToBinaryOperator(EToken Token, bool bAssertIfNotOpe
 
 inline bool IsBinaryOperator(EToken Token)
 {
-	return TokenToBinaryOperator(Token, false) != FOperator::Error;
+	return TokenToBinaryOperator(Token, false) != AST::FOperator::Error;
 }
 
-inline FOperator::EType TokenToUnaryOperator(EToken Token, bool bAssertIfNotOperator)
+inline AST::FOperator::EType TokenToUnaryOperator(EToken Token, bool bAssertIfNotOperator)
 {
+	using namespace AST;
 	switch (Token)
 	{
 	case EToken::Minus:
@@ -442,7 +443,7 @@ inline FOperator::EType TokenToUnaryOperator(EToken Token, bool bAssertIfNotOper
 
 inline bool IsUnaryOperator(EToken Token)
 {
-	return TokenToUnaryOperator(Token, false) != FOperator::Error;
+	return TokenToUnaryOperator(Token, false) != AST::FOperator::Error;
 }
 
 inline bool IsAnyOperator(EToken Token)

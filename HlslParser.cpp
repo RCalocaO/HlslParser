@@ -4,6 +4,7 @@
 #include "stdafx.h"
 #include "HlslAST.h"
 #include "HlslParser.h"
+#include "HlslIR.h"
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <chrono>
@@ -31,8 +32,9 @@ static std::string Load(const char* Filename)
 	return String;
 }
 
-int GetPrecedence(FOperator::EType Operator)
+int GetPrecedence(AST::FOperator::EType Operator)
 {
+	using namespace AST;
 	switch (Operator)
 	{
 	case FOperator::Ternary:
@@ -81,7 +83,7 @@ int GetPrecedence(FOperator::EType Operator)
 
 struct FBaseParseRules
 {
-	std::list<FBase*> Values;
+	std::list<AST::FBase*> Values;
 //	std::map<std::vector<EToken>, std::function<bool(FParseRules&, FTokenizer& Tokenizer)>> Rules;
 	FTokenizer& Tokenizer;
 
@@ -102,24 +104,24 @@ struct FBaseParseRules
 	{
 		if (Token == EToken::Integer)
 		{
-			auto* Node = new FConstant;
-			Node->Type = FConstant::Integer;
+			auto* Node = new AST::FConstant;
+			Node->Type = AST::FConstant::Integer;
 			Node->UIntValue = atoi(String.c_str());
 			PushTerminal(Node);
 			return true;
 		}
 		else if (Token == EToken::HexInteger)
 		{
-			auto* Node = new FConstant;
-			Node->Type = FConstant::HexInteger;
+			auto* Node = new AST::FConstant;
+			Node->Type = AST::FConstant::HexInteger;
 			Node->UIntValue = (uint32_t)atoll(String.c_str());
 			PushTerminal(Node);
 			return true;
 		}
 		else if (Token == EToken::Float)
 		{
-			auto* Node = new FConstant;
-			Node->Type = FConstant::Float;
+			auto* Node = new AST::FConstant;
+			Node->Type = AST::FConstant::Float;
 			Node->FloatValue = (float)atof(String.c_str());
 			PushTerminal(Node);
 			return true;
@@ -140,7 +142,7 @@ struct FBaseParseRules
 		return false;
 	}
 
-	virtual void PushTerminal(FBase* Node)
+	virtual void PushTerminal(AST::FBase* Node)
 	{
 		Values.push_back(Node);
 	}
@@ -155,10 +157,10 @@ struct FParseRulesRecursiveDescent : public FBaseParseRules
 	{
 	}
 
-	void MakeOperator(FOperator::EType Type, uint32_t NumOperands)
+	void MakeOperator(AST::FOperator::EType Type, uint32_t NumOperands)
 	{
 		assert(NumOperands >= 1 && NumOperands <= 3);
-		auto* Node = new FOperator;
+		auto* Node = new AST::FOperator;
 		Node->Type = Type;
 		assert(Values.size() >= NumOperands);
 		if (NumOperands >= 2)
@@ -199,7 +201,7 @@ struct FParseRulesRecursiveDescent : public FBaseParseRules
 
 	bool ParseExpressionUnary()
 	{
-		FOperator::EType UnaryOp = FOperator::Sentinel;
+		AST::FOperator::EType UnaryOp = AST::FOperator::Sentinel;
 		if (Tokenizer.PeekToken() == EToken::Minus || Tokenizer.PeekToken() == EToken::Plus || Tokenizer.PeekToken() == EToken::Exclamation || Tokenizer.PeekToken() == EToken::Tilde)
 		{
 			UnaryOp = TokenToUnaryOperator(Tokenizer.PeekToken(), false);
@@ -211,7 +213,7 @@ struct FParseRulesRecursiveDescent : public FBaseParseRules
 			return Error();
 		}
 
-		if (UnaryOp != FOperator::Sentinel)
+		if (UnaryOp != AST::FOperator::Sentinel)
 		{
 			MakeOperator(UnaryOp, 1);
 		}
@@ -228,7 +230,7 @@ struct FParseRulesRecursiveDescent : public FBaseParseRules
 		while (Tokenizer.PeekToken() == EToken::Multiply || Tokenizer.PeekToken() == EToken::Divide || Tokenizer.PeekToken() == EToken::Mod)
 		{
 			Tokenizer.Advance();
-			FOperator::EType Type = TokenToBinaryOperator(Tokenizer.PreviousTokenType(), true);
+			AST::FOperator::EType Type = TokenToBinaryOperator(Tokenizer.PreviousTokenType(), true);
 			if (!ParseExpressionUnary())
 			{
 				return Error();
@@ -250,7 +252,7 @@ struct FParseRulesRecursiveDescent : public FBaseParseRules
 		while (Tokenizer.PeekToken() == EToken::Plus || Tokenizer.PeekToken() == EToken::Minus)
 		{
 			Tokenizer.Advance();
-			FOperator::EType Type = TokenToBinaryOperator(Tokenizer.PreviousTokenType(), true);
+			AST::FOperator::EType Type = TokenToBinaryOperator(Tokenizer.PreviousTokenType(), true);
 			if (!ParseExpressionMultiplicative())
 			{
 				return Error();
@@ -272,7 +274,7 @@ struct FParseRulesRecursiveDescent : public FBaseParseRules
 		while (Tokenizer.PeekToken() == EToken::GreaterGreater || Tokenizer.PeekToken() == EToken::LowerLower)
 		{
 			Tokenizer.Advance();
-			FOperator::EType Type = TokenToBinaryOperator(Tokenizer.PreviousTokenType(), true);
+			AST::FOperator::EType Type = TokenToBinaryOperator(Tokenizer.PreviousTokenType(), true);
 			if (!ParseExpressionAdditive())
 			{
 				return Error();
@@ -311,7 +313,7 @@ struct FParseRulesRecursiveDescent : public FBaseParseRules
 		if (IsRelational(Tokenizer.PeekToken()))
 		{
 			Tokenizer.Advance();
-			FOperator::EType Type = TokenToBinaryOperator(Tokenizer.PreviousTokenType(), true);
+			AST::FOperator::EType Type = TokenToBinaryOperator(Tokenizer.PreviousTokenType(), true);
 			if (!ParseShiftExpression())
 			{
 				return Error();
@@ -339,7 +341,7 @@ struct FParseRulesRecursiveDescent : public FBaseParseRules
 				return false;
 			}
 
-			MakeOperator(FOperator::BitAnd, 2);
+			MakeOperator(AST::FOperator::BitAnd, 2);
 		}
 
 		return true;
@@ -360,7 +362,7 @@ struct FParseRulesRecursiveDescent : public FBaseParseRules
 				return false;
 			}
 
-			MakeOperator(FOperator::Xor, 2);
+			MakeOperator(AST::FOperator::Xor, 2);
 		}
 
 		return true;
@@ -381,7 +383,7 @@ struct FParseRulesRecursiveDescent : public FBaseParseRules
 				return false;
 			}
 
-			MakeOperator(FOperator::BitOr, 2);
+			MakeOperator(AST::FOperator::BitOr, 2);
 		}
 
 		return true;
@@ -402,7 +404,7 @@ struct FParseRulesRecursiveDescent : public FBaseParseRules
 				return false;
 			}
 
-			MakeOperator(FOperator::LogicalAnd, 2);
+			MakeOperator(AST::FOperator::LogicalAnd, 2);
 		}
 
 		return true;
@@ -423,7 +425,7 @@ struct FParseRulesRecursiveDescent : public FBaseParseRules
 				return false;
 			}
 
-			MakeOperator(FOperator::LogicalOr, 2);
+			MakeOperator(AST::FOperator::LogicalOr, 2);
 		}
 
 		return true;
@@ -456,7 +458,7 @@ struct FParseRulesRecursiveDescent : public FBaseParseRules
 				return false;
 			}
 
-			MakeOperator(FOperator::Ternary, 3);
+			MakeOperator(AST::FOperator::Ternary, 3);
 		}
 
 		return true;
@@ -480,11 +482,12 @@ struct FParseRulesShuntingYard2 : public FBaseParseRules
 	{
 	}
 
-	std::stack<FBase*> Operands;
-	std::stack<FOperator::EType> Operators;
+	std::stack<AST::FBase*> Operands;
+	std::stack<AST::FOperator::EType> Operators;
 
 	void PopOperator()
 	{
+		using namespace AST;
 		assert(!Operators.empty());
 		FOperator::EType Top = Operators.top();
 		Operators.pop();
@@ -529,7 +532,7 @@ struct FParseRulesShuntingYard2 : public FBaseParseRules
 
 	virtual bool ParseExpression() override
 	{
-		PushOperator(FOperator::Sentinel);
+		PushOperator(AST::FOperator::Sentinel);
 		if (!E())
 		{
 			Error();
@@ -544,11 +547,11 @@ struct FParseRulesShuntingYard2 : public FBaseParseRules
 		return true;
 	}
 
-	void PushOperator(FOperator::EType Operator)
+	void PushOperator(AST::FOperator::EType Operator)
 	{
-		if (Operator != FOperator::Sentinel)
+		if (Operator != AST::FOperator::Sentinel)
 		{
-			while (!Operators.empty() && Operators.top() != FOperator::Sentinel && GetPrecedence(Operators.top()) > GetPrecedence(Operator))
+			while (!Operators.empty() && Operators.top() != AST::FOperator::Sentinel && GetPrecedence(Operators.top()) > GetPrecedence(Operator))
 			{
 				PopOperator();
 			}
@@ -579,14 +582,14 @@ struct FParseRulesShuntingYard2 : public FBaseParseRules
 			}
 			else if (Tokenizer.Match(EToken::Question))
 			{
-				PushOperator(FOperator::Ternary);
+				PushOperator(AST::FOperator::Ternary);
 				if (!E())
 				{
 					return false;
 				}
 
 				assert(!Operators.empty());
-				assert(Operators.top() == FOperator::Ternary);
+				assert(Operators.top() == AST::FOperator::Ternary);
 
 				if (!Tokenizer.Match(EToken::Colon))
 				{
@@ -600,9 +603,9 @@ struct FParseRulesShuntingYard2 : public FBaseParseRules
 				}
 
 				assert(!Operators.empty());
-				assert(Operators.top() == FOperator::Ternary);
+				assert(Operators.top() == AST::FOperator::Ternary);
 				Operators.pop();
-				Operators.push(FOperator::TernaryEnd);
+				Operators.push(AST::FOperator::TernaryEnd);
 /*
 
 				FOperator* Operator = new FOperator;
@@ -624,7 +627,7 @@ struct FParseRulesShuntingYard2 : public FBaseParseRules
 		}
 
 
-		while (!Operators.empty() && Operators.top() != FOperator::Sentinel && Operators.top() != FOperator::Ternary)
+		while (!Operators.empty() && Operators.top() != AST::FOperator::Sentinel && Operators.top() != AST::FOperator::Ternary)
 		{
 			PopOperator();
 		}
@@ -634,7 +637,7 @@ struct FParseRulesShuntingYard2 : public FBaseParseRules
 	void PushOperand()
 	{
 		assert(!Values.empty());
-		FBase* Operand = Values.back();
+		AST::FBase* Operand = Values.back();
 		Values.pop_back();
 		Operands.push(Operand);
 	}
@@ -649,7 +652,7 @@ struct FParseRulesShuntingYard2 : public FBaseParseRules
 		else if (Next == EToken::LeftParenthesis)
 		{
 			Tokenizer.Advance();
-			PushOperator(FOperator::Sentinel);
+			PushOperator(AST::FOperator::Sentinel);
 			if (!E())
 			{
 				return false;
@@ -657,7 +660,7 @@ struct FParseRulesShuntingYard2 : public FBaseParseRules
 			if (Tokenizer.Match(EToken::RightParenthesis))
 			{
 				assert(!Operators.empty());
-				assert(Operators.top() == FOperator::Sentinel);
+				assert(Operators.top() == AST::FOperator::Sentinel);
 				Operators.pop();
 			}
 			else
@@ -692,7 +695,7 @@ struct FParseRulesPrecedenceClimbing : public FBaseParseRules
 
 	virtual bool ParseExpression() override
 	{
-		FBase* t = Exp(0);
+		AST::FBase* t = Exp(0);
 		if (!t)
 		{
 			Error();
@@ -703,9 +706,9 @@ struct FParseRulesPrecedenceClimbing : public FBaseParseRules
 		return true;
 	}
 
-	FBase* Exp(int p)
+	AST::FBase* Exp(int p)
 	{
-		FBase* t = P();
+		AST::FBase* t = P();
 		if (!t)
 		{
 			return nullptr;
@@ -713,10 +716,10 @@ struct FParseRulesPrecedenceClimbing : public FBaseParseRules
 
 		while (IsBinaryOperator(Tokenizer.PeekToken()) && GetPrecedence(TokenToBinaryOperator(Tokenizer.PeekToken(), false)) >= p)
 		{
-			FOperator::EType Op = TokenToBinaryOperator(Tokenizer.PeekToken(), true);
+			AST::FOperator::EType Op = TokenToBinaryOperator(Tokenizer.PeekToken(), true);
 			Tokenizer.Advance();
 			int q = (AssociativityIsRight(Op) ? 0 : 1) + GetPrecedence(Op);
-			FBase* t1 = Exp(q);
+			AST::FBase* t1 = Exp(q);
 			if (!t1)
 			{
 				return nullptr;
@@ -726,8 +729,8 @@ struct FParseRulesPrecedenceClimbing : public FBaseParseRules
 
 		if (Tokenizer.Match(EToken::Question))
 		{
-			FBase* Condition = t;
-			FBase* LHS = Exp(0);
+			AST::FBase* Condition = t;
+			AST::FBase* LHS = Exp(0);
 			if (!LHS)
 			{
 				return nullptr;
@@ -738,25 +741,25 @@ struct FParseRulesPrecedenceClimbing : public FBaseParseRules
 				return nullptr;
 			}
 
-			FBase* RHS = Exp(0);
+			AST::FBase* RHS = Exp(0);
 			if (!RHS)
 			{
 				return nullptr;
 			}
 
-			t = MakeOperator(FOperator::Ternary, LHS, RHS);
+			t = MakeOperator(AST::FOperator::Ternary, LHS, RHS);
 			(t->AsOperator())->TernaryCondition = Condition;
 		}
 
 		return t;
 	}
 
-	bool AssociativityIsRight(FOperator::EType Operator)
+	bool AssociativityIsRight(AST::FOperator::EType Operator)
 	{
 		switch (Operator)
 		{
-		case FOperator::UnaryPlus:
-		case FOperator::UnaryMinus:
+		case AST::FOperator::UnaryPlus:
+		case AST::FOperator::UnaryMinus:
 			return true;
 		default:
 			break;
@@ -765,28 +768,28 @@ struct FParseRulesPrecedenceClimbing : public FBaseParseRules
 		return false;
 	}
 
-	FOperator* MakeOperator(FOperator::EType Type, FBase* LHS, FBase* RHS = nullptr)
+	AST::FOperator* MakeOperator(AST::FOperator::EType Type, AST::FBase* LHS, AST::FBase* RHS = nullptr)
 	{
-		FOperator* Operator = new FOperator;
+		AST::FOperator* Operator = new AST::FOperator;
 		Operator->Type = Type;
 		Operator->LHS = LHS;
 		Operator->RHS = RHS;
 		return Operator;
 	}
 
-	FBase* P()
+	AST::FBase* P()
 	{
 		if (IsUnaryOperator(Tokenizer.PeekToken()))
 		{
-			FOperator::EType Op = TokenToUnaryOperator(Tokenizer.PeekToken(), true);
+			AST::FOperator::EType Op = TokenToUnaryOperator(Tokenizer.PeekToken(), true);
 			Tokenizer.Advance();
 			int q = GetPrecedence(Op);
-			FBase* t = Exp(q);
+			AST::FBase* t = Exp(q);
 			return MakeOperator(Op, t);
 		}
 		else if (Tokenizer.Match(EToken::LeftParenthesis))
 		{
-			FBase* t = Exp(0);
+			AST::FBase* t = Exp(0);
 			bool bMatchRP = Tokenizer.Match(EToken::RightParenthesis);
 			assert(bMatchRP);
 			return t;
@@ -794,7 +797,7 @@ struct FParseRulesPrecedenceClimbing : public FBaseParseRules
 		else if (ParseTerminal())
 		{
 			assert(!Values.empty());
-			FBase* Terminal = Values.back();
+			AST::FBase* Terminal = Values.back();
 			Values.pop_back();
 			return Terminal;
 		}
@@ -812,7 +815,7 @@ struct FParseRulesPratt : public FBaseParseRules
 
 	virtual bool ParseExpression() override
 	{
-		FBase* t = E(0);
+		AST::FBase* t = E(0);
 		if (!t)
 		{
 			return false;
@@ -822,9 +825,9 @@ struct FParseRulesPratt : public FBaseParseRules
 		return true;
 	}
 
-	FOperator* MakeOperator(FOperator::EType Type, FBase* LHS, FBase* RHS = nullptr, FBase* Ternary = nullptr)
+	AST::FOperator* MakeOperator(AST::FOperator::EType Type, AST::FBase* LHS, AST::FBase* RHS = nullptr, AST::FBase* Ternary = nullptr)
 	{
-		FOperator* Operator = new FOperator;
+		AST::FOperator* Operator = new AST::FOperator;
 		Operator->Type = Type;
 		Operator->TernaryCondition = Ternary;
 		Operator->LHS = LHS;
@@ -832,24 +835,24 @@ struct FParseRulesPratt : public FBaseParseRules
 		return Operator;
 	}
 
-	FBase* Nud(EToken Token)
+	AST::FBase* Nud(EToken Token)
 	{
 		if (ParseTerminal(Token, Tokenizer.PreviousTokenString()))
 		{
 			assert(Values.size() >= 1);
-			FBase* Terminal = Values.back();
+			AST::FBase* Terminal = Values.back();
 			Values.pop_back();
 			return Terminal;
 		}
 		else if (IsUnaryOperator(Token))
 		{
-			FOperator::EType Operator = TokenToUnaryOperator(Token, true);
-			FBase* LHS = E(GetPrecedence(Operator));
+			AST::FOperator::EType Operator = TokenToUnaryOperator(Token, true);
+			AST::FBase* LHS = E(GetPrecedence(Operator));
 			return MakeOperator(Operator, LHS);
 		}
 		else if (Token == EToken::LeftParenthesis)
 		{
-			FBase* Exp = E(0);
+			AST::FBase* Exp = E(0);
 			if (!Tokenizer.Match(EToken::RightParenthesis))
 			{
 				return nullptr;
@@ -868,26 +871,26 @@ struct FParseRulesPratt : public FBaseParseRules
 		return GetPrecedence(TokenToBinaryOperator(Token, true));
 	}
 
-	FBase* Led(EToken Token, FBase* Left)
+	AST::FBase* Led(EToken Token, AST::FBase* Left)
 	{
 		if (Token == EToken::Question)
 		{
-			FBase* LHS = E(0);
+			AST::FBase* LHS = E(0);
 			if (!Tokenizer.Match(EToken::Colon))
 			{
 				Error();
 				return nullptr;
 			}
-			FBase* RHS = E(0);
-			return MakeOperator(FOperator::Ternary, LHS, RHS, Left);
+			AST::FBase* RHS = E(0);
+			return MakeOperator(AST::FOperator::Ternary, LHS, RHS, Left);
 		}
-		FBase* Right = E(Lbp(Token));
+		AST::FBase* Right = E(Lbp(Token));
 		return MakeOperator(TokenToBinaryOperator(Token, false), Left, Right);
 	}
 
-	FBase* E(int rbp)
+	AST::FBase* E(int rbp)
 	{
-		FBase* Left;
+		AST::FBase* Left;
 		if (Tokenizer.HasMoreTokens())
 		{
 			EToken Token = Tokenizer.PeekToken();

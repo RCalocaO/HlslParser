@@ -2,6 +2,9 @@
 
 namespace IR
 {
+	struct FConstant;
+	struct FOperator;
+
 	struct FExpression
 	{
 		virtual ~FExpression() {}
@@ -21,7 +24,7 @@ namespace IR
 
 	struct FConstant : public FExpression
 	{
-		virtual FConstant* AsConstant() { return this; }
+		virtual FConstant* AsConstant() override { return this; }
 	};
 
 	struct FScalarConstant : public FConstant
@@ -32,7 +35,7 @@ namespace IR
 	{
 		FType* Type;
 
-		virtual FOperator* AsOperator() { return this; }
+		virtual FOperator* AsOperator() override { return this; }
 	};
 
 	struct FUnaryOperator : public FOperator
